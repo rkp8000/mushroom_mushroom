@@ -1,0 +1,10 @@
+env
+.idea
+
+.DS_Store
+.DS_store
+
+*.pyc
+.ipynb_checkpoints
+.cache
+
