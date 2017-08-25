@@ -13,12 +13,10 @@ from .d_models import Base
 import LOCAL_SETTINGS as L
 
 
-def connect_and_make_session():
+def make_session():
     """
-    Connect to a database, asking user for username and password, and return
-    a new session object for that database.
-
-    :param database: name of database to connect to
+    Connect to the database and return a new session object for that database.
+    
     :return: session object
     """
 

@@ -25,10 +25,8 @@ class Trial(Base):
     file_name_gcamp = Column(String)
     file_name_gcamp_timestamp = Column(String)
     file_name_light_times = Column(String)
-
-    file_name_bouts = Column(String)
-    file_name_left_turns = Column(String)
-    file_name_right_turns = Column(String)
-
     file_name_air_tube = Column(String)
+    
     details = Column(JSONB)
+    
+    walking_threshold = Column(Float)
