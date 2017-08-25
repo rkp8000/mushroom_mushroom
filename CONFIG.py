@@ -1,4 +1,7 @@
 """Some constants for this project."""
+PI = 3.14159265359
+DT = 0.1
+
 # FILE NAMES
 BEHAV_FILE_ENDING = '.dat'
 GCAMP_FILE = 'GCaMP_Time_Pre.csv'
@@ -6,6 +9,12 @@ LIGHT_TIMES_FILE = 'Light_Times.xlsx'
 ROI_PROFILES_FILE = 'ROI-profiles.txt'
 AIR_TUBE_FILE = 'Air_Tube_Motion.csv'
 
+# EXPERIMENT FEATURES
+WRAPPED_ANG_VARS = ['heading', 'air_tube']
+ODOR_START = 90  # s
+ODOR_END = 150  # s
+AIR_FLOW_MAX_ANGLE = 90  # deg
+AIR_FLOW_OFF_ANGLE = 180 * 2.67 / PI
 
 # LOADING PARAMETERS
 VELOCITY_FILTER_DEFAULT = {'AMP': 2, 'TAU': 0.8, 'T_MAX_FILT': 8}
