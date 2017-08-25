@@ -1,8 +1,6 @@
 """
 General purpose figures.
 """
-import matplotlib.pyplot as plt; plt.style.use('ggplot')
-from IPython.display import display, HTML
 from copy import copy
 
 import json
@@ -12,145 +10,15 @@ import pandas as pd
 from scipy import stats
 import traceback
 
+from data import DataLoader
 from db import d_models
 from db import connect_and_make_session, empty_tables
 from plot import get_n_colors, set_font_size, stacked_overlay
-from shortcuts import get_processed_data_loaders
 
 import CONFIG as C
 import LOCAL_SETTINGS as L
 
-
-def write_trials_from_file_system():
-    """
-    Look in the file system and extract paths, etc., of all the data files and store them
-    in the database.
-    """
-
-    session = connect_and_make_session()
-    empty_tables(session, d_models.Trial)
-
-    # get directories for different experiments
-
-    for expt_dir in next(os.walk(L.DATA_ROOT))[1]:
-        print('LOADING DATA FILES FROM EXPERIMENT: "{}".'.format(expt_dir))
-
-        # get all of the bottom level directories (which contain the data files)
-        data_dirs = []
-
-        for root, dirs, files in os.walk(os.path.join(L.DATA_ROOT, expt_dir)):
-            if not dirs: data_dirs.append(root)
-
-        # store trial for each data directory in database
-        data_ctr = 0
-
-        for data_dir in data_dirs:
-
-            print('TRIAL: "{}"'.format(os.path.basename(data_dir)))
-
-            trial = d_models.Trial()
-
-            trial.name = os.path.basename(data_dir)
-            trial.expt = expt_dir
-            trial.fly = '.'.join(trial.name.split('.')[:2])
-            trial.number = int(trial.name.split('.')[2])
-
-            trial.path = os.path.relpath(data_dir, L.DATA_ROOT)
-
-            # get names of all files in trial directory
-            file_names = next(os.walk(data_dir))[2]
-
-            try:
-                file_name_behav = [
-                    fn for fn in file_names if fn.endswith(C.BEHAV_FILE_ENDING)][0]
-            except:
-                raise Exception(
-                    'Could not find ".dat" file in directory: "{}"'.format(
-                        data_dir))
-
-            if True:
-                try:
-                    file_name_gcamp = [
-                        fn for fn in file_names if fn == C.ROI_PROFILES_FILE][0]
-                except:
-                    raise Exception(
-                        ('Could not find "ROI-profiles" file in directory: '
-                         '"{}"'.format(data_dir)))
-
-                try:
-                    file_name_gcamp_timestamp = [
-                        fn for fn in file_names if fn == C.GCAMP_FILE
-                    ][0]
-                except:
-                    raise Exception(
-                        ('Could not find GCaMP timestamp file in directory: '
-                         '"{}"'.format(data_dir)))
-
-                try:
-                    file_name_light_times = [
-                        fn for fn in file_names if fn == C.LIGHT_TIMES_FILE
-                    ][0]
-                except:
-                    raise Exception(
-                        ('Could not find light times file in directory: '
-                         '"{}"'.format(data_dir)))
-
-            else:
-                try:
-                    file_name_gcamp = [
-                        fn for fn in file_names
-                        if fn.endswith('.csv') and 'Auto' not in fn][0]
-                except:
-                    raise Exception(
-                        'Could not find ".csv" file in directory: "{}"'.format(
-                            data_dir))
-
-                file_name_gcamp_timestamp = None
-                file_name_light_times = None
-
-            # see if there are files defining bouts and turns
-            file_name_bouts = \
-                'Auto_Bouts.csv' if 'Auto_Bouts.csv' in file_names else None
-            file_name_left_turns = \
-                'Auto_TurnL.csv' if 'Auto_TurnL.csv' in file_names else None
-            file_name_right_turns = \
-                'Auto_TurnR.csv' if 'Auto_TurnR.csv' in file_names else None
-
-            # see if there is a file defining air tube motion
-            file_name_air_tube = C.AIR_TUBE_FILE \
-                if C.AIR_TUBE_FILE in file_names else None
-
-            # see if there is a details file
-            if 'details.json' in file_names:
-                path = os.path.join(data_dir, 'details.json')
-                with open(path) as f: details = json.load(f)
-            else:
-                details = {}
-
-            trial.file_name_behav = file_name_behav
-            trial.file_name_gcamp = file_name_gcamp
-            trial.file_name_gcamp_timestamp = file_name_gcamp_timestamp
-            trial.file_name_light_times = file_name_light_times
-
-            trial.file_name_bouts = file_name_bouts
-            trial.file_name_left_turns = file_name_left_turns
-            trial.file_name_right_turns = file_name_right_turns
-
-            trial.file_name_air_tube = file_name_air_tube
-            trial.details = details
-
-            session.add(trial)
-
-            data_ctr += 1
-
-        session.commit()
-
-        print(('{}/{} TRIALS LOADED FOR EXPERIMENT: '
-               '"{}".'.format(data_ctr, len(data_dirs), expt_dir)))
-
-    print('Complete.')
-
-
+   
 def trace_overlay(
         TRIAL_IDS, VARIABLES, VELOCITY_FILTER,
         REFS=None, COLORS=None, LABELS=None, T_LIM=None, HEIGHT=None):
