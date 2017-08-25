@@ -3,6 +3,20 @@ import numbers
 import numpy as np
 
 
+def shade(ax, segs, rgba):
+    """
+    Add vertical shading to a time-series plot.
+    
+    :param ax: axis object
+    :param segs: list of segment starts and ends
+    :param rgba: rgba shading value
+    """
+    for seg in segs:
+        ax.axvspan(*seg, color=rgba)
+    
+    return ax
+
+        
 def set_font_size(ax, font_size, legend_font_size=None):
     """Set fontsize of all axis text objects to specified value."""
 
