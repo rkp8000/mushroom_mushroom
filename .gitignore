@@ -8,3 +8,8 @@ env
 .ipynb_checkpoints
 .cache
 
+*.png
+*.npy
+
+sandbox.ipynb
+
