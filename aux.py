@@ -18,25 +18,53 @@ def nansem(x, axis=None):
     return std / sqrt_n
 
 
-def prepare_logging(log_file):
+def make_extended_predictor_matrix(vs, windows, order):
     """
-    Prepare the logging module so that calls to it will write to a specified log file.
-
-    :param log_file: path to log file
+    Make a predictor matrix that includes offsets at multiple time points.
+    For example, if vs has 2 keys 'a' and 'b', windows is {'a': (-1, 1),
+    'b': (-1, 2)}, and order = ['a', 'b'], then result rows will look like:
+    
+        [1, v['a'][t-1], v['a'][t], v['b'][t-1], v['b'][t], v['b'][t+1]]
+        
+    :param vs: dict of 1-D array of predictors
+    :param windows: dict of (start, end) time point tuples, rel. to time point of 
+        prediction, e.g., negative for time points before time point of
+        prediction
+    :param order: order to add predictors to final matrix in
+    :return: extended predictor matrix, which has shape
+        (n, 1 + (windows[0][1]-windows[0][0]) + (windows[1][1]-windows[1][0]) + ...)
     """
+    if not np.all([w[1] - w[0] >= 0 for w in windows.items()]):
+        raise ValueError('Windows must all be non-negative.')
+        
+    n = len(list(vs.values())[0])
+    if not np.all([v.ndim == 1 and len(v) == n for v in vs.values()]):
+        raise ValueError('All values in "vs" must be 1-D arrays of the same length.')
+        
+    # make extended predictor array
+    vs_extd = [np.ones((n, 1))]
+    
+    # loop over predictor variables
+    for key in order:
+        
+        start, end = windows[key]
+        
+        # make empty predictor matrix
+        v_ = np.nan * np.zeros((n, end-start))
 
-    if os.path.dirname(log_file):
+        # loop over offsets
+        for col_ctr, offset in enumerate(range(start, end)):
 
-        if not os.path.exists(os.path.dirname(log_file)):
+            # fill in predictors offset by specified amount
+            if offset < 0:
+                v_[-offset:, col_ctr] = vs[key][:offset]
+            elif offset == 0:
+                v_[:, col_ctr] = vs[key][:]
+            elif offset > 0:
+                v_[:-offset, col_ctr] = vs[key][offset:]
 
-            os.makedirs(os.path.dirname(log_file))
+        # add offset predictors to list
+        v_extd.append(v_)
 
-        reload(logging)
-
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    logging.getLogger("sqlalchemy.engine.base.Engine").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy.pool.QueuePool").setLevel(logging.WARNING)
+    # return full predictor matrix
+    return np.concatenate(v_extd, axis=1)
