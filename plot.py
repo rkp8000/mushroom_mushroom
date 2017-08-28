@@ -1,6 +1,8 @@
 from matplotlib.pyplot import cm
 import numbers
 import numpy as np
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 
 
 def shade(ax, segs, rgba):
