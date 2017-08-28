@@ -24,7 +24,7 @@ def make_extended_predictor_matrix(vs, windows, order):
     For example, if vs has 2 keys 'a' and 'b', windows is {'a': (-1, 1),
     'b': (-1, 2)}, and order = ['a', 'b'], then result rows will look like:
     
-        [1, v['a'][t-1], v['a'][t], v['b'][t-1], v['b'][t], v['b'][t+1]]
+        [v['a'][t-1], v['a'][t], v['b'][t-1], v['b'][t], v['b'][t+1]]
         
     :param vs: dict of 1-D array of predictors
     :param windows: dict of (start, end) time point tuples, rel. to time point of 
@@ -32,9 +32,9 @@ def make_extended_predictor_matrix(vs, windows, order):
         prediction
     :param order: order to add predictors to final matrix in
     :return: extended predictor matrix, which has shape
-        (n, 1 + (windows[0][1]-windows[0][0]) + (windows[1][1]-windows[1][0]) + ...)
+        (n, (windows[0][1]-windows[0][0]) + (windows[1][1]-windows[1][0]) + ...)
     """
-    if not np.all([w[1] - w[0] >= 0 for w in windows.items()]):
+    if not np.all([w[1] - w[0] >= 0 for w in windows.values()]):
         raise ValueError('Windows must all be non-negative.')
         
     n = len(list(vs.values())[0])
@@ -42,7 +42,7 @@ def make_extended_predictor_matrix(vs, windows, order):
         raise ValueError('All values in "vs" must be 1-D arrays of the same length.')
         
     # make extended predictor array
-    vs_extd = [np.ones((n, 1))]
+    vs_extd = []
     
     # loop over predictor variables
     for key in order:
@@ -64,7 +64,7 @@ def make_extended_predictor_matrix(vs, windows, order):
                 v_[:-offset, col_ctr] = vs[key][offset:]
 
         # add offset predictors to list
-        v_extd.append(v_)
+        vs_extd.append(v_)
 
     # return full predictor matrix
-    return np.concatenate(v_extd, axis=1)
+    return np.concatenate(vs_extd, axis=1)
