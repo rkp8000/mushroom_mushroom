@@ -206,6 +206,8 @@ class DataLoaderBase(object):
             air_tube_resampled = wrap_signal(
                 air_tube_unwrapped_resampled, -180, 180)
             self.data_air_tube = air_tube_resampled
+        else:
+            self.data_air_tube = np.repeat(np.nan, len(self.timestamp_gcamp))
     
     def filt_random_noise(self):
         """
