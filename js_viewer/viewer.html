@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js">
+</script>
+<script src="trials.js">
+</script>
+<script>
+$(document).ready(function(){
+  trial_keys = Object.keys(trials);
+  for (ctr = 0; ctr < trial_keys.length; ctr++) {
+    var trial_key = trial_keys[ctr];
+    $("#trial_selector").append(
+      $("<option>", {"value": trial_key, "text": trial_key})).insertAfter($("#trial_selector"));
+  }
+  alert(plot_types);
+  for (ctr = 0; ctr < plot_types.length; ctr++) {
+    var plot_type = plot_types[ctr];
+    $("#plot_selector").append(
+      $("<option>", {"value": plot_type, "text": plot_type})).insertAfter($("#plot_selector"));
+  }
+
+  var current_trial = trial_keys[0];
+  var current_plot_type = plot_types[0];
+
+  function show_plot(trial_key, plot_type) {
+    var src = "../" + trials[trial_key] + "/" + plot_type + ".png";
+    $("#plot").attr("src", src);
+  }
+  
+  show_plot(current_trial, current_plot_type);
+  $("#current_trial").html(current_trial);
+
+  $("#trial_selector").change(function() {
+    var current_trial = $(this).val();
+    show_plot(current_trial, current_plot_type);
+    $("#current_trial").html(current_trial);
+  });
+  
+  $("#plot_selector").change(function() {
+    var current_plot_type = $(this).val();
+    show_plot(current_trial, current_plot_type);
+  });
+});
+</script>
+</head>
+<body>
+<h3>Select trial and plot type</h3>
+<form>
+  <select id="trial_selector">
+  </select> 
+  <select id="plot_selector">
+  </select>
+</form>
+<h3 id="current_trial"></h3>
+<img id="plot" src="" />
+</body>
+</html>
+
