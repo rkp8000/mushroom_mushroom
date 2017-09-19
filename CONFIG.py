@@ -2,12 +2,69 @@
 PI = 3.14159265359
 DT = 0.1
 
-# FILE NAMES
-BEHAV_FILE_ENDING = '.dat'
-GCAMP_FILE = 'GCaMP_Time_Pre.csv'
-LIGHT_TIMES_FILE = 'Light_Times.xlsx'
-ROI_PROFILES_FILE = 'ROI-profiles.txt'
-AIR_TUBE_FILE = 'Air_Tube_Motion.csv'
+EXPTS = {
+    'DRIVEN_SINUSOIDAL': 'driven_sinusoidal',
+    'DRIVEN_RANDOM': 'driven_random',
+    'CLOSED_LOOP': 'closed_loop',
+    'NO_AIR': 'no_air',
+}
+
+FILE_ENDINGS = {
+    'BEHAV': '.dat',
+    'T_GCAMP': 'GCaMP_Time_Pre.csv',
+    'LIGHT': 'Light_Times.xlsx',
+    'GCAMP': 'ROI-profiles.txt',
+    'AIR': 'Air_Tube_Motion.csv',
+}
+
+COLS_FICTRAC = {
+    'FRAME_CTR': 0,
+    'V_LAT': 5,
+    'V_FWD': 6,
+    'V_ANG': 7,
+    'HEADING': 16,
+}
+
+DT_FICTRAC = 1./60
+
+PFX_CLEAN = 'clean'
+
+N_COLS_BEHAV = 4
+
+COLS_BEHAV = {'V_LAT': 0, 'V_FWD': 1, 'V_ANG': 2, 'HEADING': 3}
+
+LIMS_ANG = (-180, 180)
+
+N_COLS_FINAL = 22
+
+COLS_FINAL = [
+    ('TIME', 0),
+    ('G2R_RED', 1),
+    ('G3R_RED', 2),
+    ('G4R_RED', 3),
+    ('G5R_RED', 4),
+    ('G2L_RED', 5),
+    ('G3L_RED', 6),
+    ('G4L_RED', 7),
+    ('G5L_RED', 8),
+    ('G2R_GREEN', 9),
+    ('G3R_GREEN', 10),
+    ('G4R_GREEN', 11),
+    ('G5R_GREEN', 12),
+    ('G2L_GREEN', 13),
+    ('G3L_GREEN', 14),
+    ('G4L_GREEN', 15),
+    ('G5L_GREEN', 16),
+    ('V_LAT', 17),
+    ('V_FWD', 18),
+    ('V_ANG', 19),
+    ('HEADING', 20),
+    ('AIR', 21),
+]
+
+COL_SLICE_GCAMP = slice(1, 17)
+COL_SLICE_BEHAV = slice(17, 21)
+COL_AIR = 21
 
 # EXPERIMENT FEATURES
 WRAPPED_ANG_VARS = ['heading', 'air_tube']
@@ -15,14 +72,14 @@ ODOR_START = 90  # s
 ODOR_END = 150  # s
 AIR_FLOW_MAX_ANGLE = 90  # deg
 AIR_FLOW_OFF_ANGLE = 180 * 2.67 / PI
+MAX_TRIAL_TIME = 300
 
 # LOADING PARAMETERS
-VELOCITY_FILTER_DEFAULT = {'AMP': 2, 'TAU': 0.8, 'T_MAX_FILT': 8}
-MAX_TRIAL_TIME = 301
+# VELOCITY_FILTER_DEFAULT = {'AMP': 2, 'TAU': 0.8, 'T_MAX_FILT': 8}
 
 DAN_ORDER = ['G2L', 'G3L', 'G4L', 'G5L', 'G2R', 'G3R', 'G4R', 'G5R']
 
-COLORS_DEFAULT = {
+COLORS = {
     'speed': (0, 0, 0),  # black
     'int_speed': (0, 0, 0),  # black
     'v_forward': (153/255, 0, 76/255),  # dark pink

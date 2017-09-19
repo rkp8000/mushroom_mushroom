@@ -21,11 +21,13 @@ class Trial(Base):
 
     path = Column(String)
 
-    file_name_behav = Column(String)
-    file_name_gcamp = Column(String)
-    file_name_gcamp_timestamp = Column(String)
-    file_name_light_times = Column(String)
-    file_name_air_tube = Column(String)
+    file_behav = Column(String)
+    file_gcamp = Column(String)
+    file_t_gcamp = Column(String)
+    file_light = Column(String)
+    file_air = Column(String)
+    
+    pfx_clean = Column(String)
     
     details = Column(JSONB)
     

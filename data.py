@@ -13,10 +13,88 @@ import PARAMS as P
 import LOCAL_SETTINGS as L
 
 
-class DataLoaderBase(object):
+class DataLoader(object):
     """
-    Base class for loading data files.
+    Class for loading data files corresponding to closed loop experiments.
+    
+    :param trial: trial object for which to load data
+    :param vel_filt: velocity filtering dict (or None)
+    :param sfx: suffix to append to cleaned data file
+        if no save file exists with this suffix a new one will be created
+    :return: DataLoader object for quick data access and transforming
     """
+    def __init__(self, trial, sfx, vel_filt):
+        
+        if vel_filt is not None:
+            raise NotImplementedError('Velocity filtering not implemented yet.')
+            
+        path_clean = os.path.join(
+            L.DATA_ROOT, trial.path, '{}_{}.csv'.format(trial.pfx_clean, sfx))
+        
+        if os.path.exists(path_clean):
+            # check for clean data file and load it if found
+            print(
+                'Loading clean data from file "{}"...'.format(
+                os.path.basename(path_clean)))
+            self.data = pd.read_csv(path_clean)
+        else:
+            print(
+                'Loading and cleaning data from directory "{}"...'.format(
+                os.path.dirname(path_clean)))
+                
+            # create raw time vector and data matrix for each data component
+            # (move these all to their own functions later)
+            t_gcamp, gcamp = load_gcamp(trial)
+            t_behav, behav = load_behav(trial)
+            t_air, air = load_air(trial, t_behav, behav)
+            
+            if not (t_gcamp[0] == t_behav[0] == t_air[0] == 0):
+                raise Exception('Relative time vectors generated incorrectly.')
+            
+            # truncate any data with time vector longer than max trial time
+            gcamp = gcamp[t_gcamp < C.MAX_TRIAL_TIME]
+            behav = behav[t_behav < C.MAX_TRIAL_TIME]
+            air = air[t_air < C.MAX_TRIAL_TIME]
+            
+            t_gcamp = t_gcamp[t_gcamp < C.MAX_TRIAL_TIME]
+            t_behav = t_behav[t_behav < C.MAX_TRIAL_TIME]
+            t_air = t_air[t_air < C.MAX_TRIAL_TIME]
+            
+            # initialize final data structure
+            t = np.arange(0, C.MAX_TRIAL_TIME, C.DT)
+            data_ = np.nan * np.zeros((len(t), C.N_COLS_FINAL))
+            data_[:, 0] = t
+
+            # loop over all timepoints one-by-one, filling in their corresponding
+            # values by averaging/interpolating the raw data
+            for t_ctr, t_ in enumerate(t):
+                t_0 = t_ - C.DT/2
+                t_1 = t_ + C.DT/2
+                
+                data_[t_ctr, C.COL_SLICE_GCAMP] = avg_or_interp(
+                    t_gcamp, gcamp, t_0, t_1, cols_ang=None)
+                data_[t_ctr, C.COL_SLICE_BEHAV] = avg_or_interp(
+                    t_behav, behav, t_0, t_1, cols_ang=[C.COLS_BEHAV['HEADING']])
+                data_[t_ctr, C.COL_AIR] = avg_or_interp(
+                    t_air, air, t_0, t_1, cols_ang=[0])
+            
+            # convert to data frame
+            data = pd.DataFrame()
+            
+            for vbl, col in C.COLS_FINAL:
+                data[vbl] = data_[:, col]
+            
+            print('Data loaded.')
+            
+            # save clean file for easy access next time
+            data.to_csv(path_clean, index=False)
+        
+        # bind data frame to data loader object
+        self.data = data
+        
+        # store walking speed threshold
+        self.walking_threshold = trial.walking_threshold
+    
     def __getattr__(self, attr):
         """
         Modify attribute selection so that we can select attributes offset in time.
@@ -41,447 +119,374 @@ class DataLoaderBase(object):
             return -getattr(self, remaining)
         
         if attr.startswith('control'):
-            return self.filt_random_noise()
-        
-    @property
-    def fs(self):
-        return round(1/self.dt_gcamp)
-
-    # useful behavioral covariates
-    @property
-    def fictive_x(self): return self.data_behav[:, 14]
+            return np.random.normal(0, 1, len(self.t))
 
     @property
-    def fictive_y(self): return self.data_behav[:, 15]
-
-    @property
-    def v(self): return self.data_behav[:, 5:8]
-
-    @property
-    def v_fwd(self): return self.data_behav[:, 6]
-
-    @property
-    def v_lat(self): return self.data_behav[:, 5]
-
-    @property
-    def v_ang(self): return self.data_behav[:, 7]
-
-    @property
-    def speed(self): return np.sqrt(np.sum(self.data_behav[:, 5:7] ** 2, axis=1))
-
-    @property
-    def speed_mean_1(self): return self.speed / self.speed.mean()
-
-    @property
-    def ball_speed(self):
-        return np.sqrt(np.sum(self.data_behav[:, 5:8] ** 2, axis=1))
-
-    @property
-    def a_fwd(self): return np.gradient(self.v_fwd) / self.dt_gcamp
-
-    @property
-    def a_lat(self): return np.gradient(self.v_lat) / self.dt_gcamp
-
-    @property
-    def a_ang(self): return np.gradient(self.v_ang) / self.dt_gcamp
-
-    @property
-    def heading(self): return self.data_behav[:, 16]
-
-    @property
-    def wind_dir(self):
-
-        wind_dir = self.heading.copy()
-
-        wind_dir[wind_dir > C.AIR_FLOW_OFF_ANGLE] = np.nan
-        wind_dir[wind_dir < -C.AIR_FLOW_OFF_ANGLE] = np.nan
-
-        wind_dir[wind_dir > C.AIR_FLOW_MAX_ANGLE] = C.AIR_FLOW_MAX_ANGLE
-        wind_dir[wind_dir < -C.AIR_FLOW_MAX_ANGLE] = -C.AIR_FLOW_MAX_ANGLE
-
-        return wind_dir
-
-    @property
-    def wind_dir_front(self):
-
-        wind_dir = self.heading.copy()
-
-        wind_dir[wind_dir > C.AIR_FLOW_MAX_ANGLE] = np.nan
-        wind_dir[wind_dir < -C.AIR_FLOW_MAX_ANGLE] = np.nan
-
-        return wind_dir
-
-    def filt_vel_exp(self, filt_params):
-        """
-        Filter the vel data with an exponential filter. This modifies the
-        variable self.data_behav.
-
-        :param filt_params: dictionary of filter params:
-            {'AMP': ..., 'TAU': ..., 'T_MAX_FILT': ...}
-        """
-
-        # build filtering function
-        if filt_params is not None:
-
-            # build a filter function
-            def filt_func(x):
-
-                result = exp_filter(
-                    self.timestamp_behav, x,
-                    filt_params['AMP'],
-                    filt_params['TAU'],
-                    filt_params['T_MAX_FILT'])
-
-                return result[0]
-
-        else:
-            def filt_func(x): return x
-
-        self.filt_func = filt_func
-
-        # filter vels (columns 5, 6, 7)
-        self.data_behav[:, 5] = filt_func(self._data_behav[:, 5])
-        self.data_behav[:, 6] = filt_func(self._data_behav[:, 6])
-        self.data_behav[:, 7] = filt_func(self._data_behav[:, 7])
-
-    def resample_behavioral_data_gcamp_matched(self):
-        """
-        Resample behavioral data to match GCAMP data time steps.
-        """
-
-        if self.timestamp_behav[-1] < self.timestamp_gcamp[-1]:
-            self.data_gcamp = self.data_gcamp[
-                self.data_gcamp[:, 0] <= self.timestamp_behav[-1], :
-            ]
-
-        data_behav = np.nan * np.zeros(
-            (len(self.timestamp_gcamp), self._data_behav.shape[1]))
-
-        # handle heading signal separately since it will jump when crossing +- pi
-        heading = self.heading.copy()
-
-        # resample fictrac data
-        data_behav[:, 1:], data_behav[:, 0] = signal.resample(
-            self.data_behav[:, 1:], num=len(self.timestamp_gcamp),
-            t=self.timestamp_behav.copy())
-        # resample heading
-        heading_unwrapped = unwrap_signal(heading, -180, 180)
-        heading_unwrapped_resampled, _ = signal.resample(
-            heading_unwrapped, num=len(self.timestamp_gcamp),
-            t=self.timestamp_behav.copy())
-
-        # re-wrap heading and store it
-        heading_resampled = wrap_signal(heading_unwrapped_resampled, -180, 180)
-        data_behav[:, 16] = heading_resampled
-        self.data_behav = data_behav
-
-        assert np.abs(data_behav[-1, 0] - self.timestamp_gcamp[-1]) < self.dt_gcamp
-
-        # resample air tube motion if necessary
-        if self.contains_air_tube_motion:
-            # unwrap it
-            air_tube_unwrapped = unwrap_signal(self.air_tube, -180, 180)
-            # resample it
-            air_tube_unwrapped_resampled = np.nan * np.zeros(self.timestamp_gcamp.shape)
-            for ctr, t_gcamp in enumerate(self.timestamp_gcamp):
-                t_min = t_gcamp - self.dt_gcamp
-                t_max = t_gcamp + self.dt_gcamp
-                mask = (t_min <= self.timestamp_air_tube) \
-                    * (self.timestamp_air_tube < t_max)
-                if np.sum(mask):
-                    air_tube_unwrapped_resampled[ctr] \
-                        = air_tube_unwrapped[mask].mean()
-
-            # linearly interpolate nans
-            for start, end in find_segs(np.isnan(air_tube_unwrapped_resampled)):
-                if start == 0 or end == len(air_tube_unwrapped_resampled):
-                    continue
-                x_before = air_tube_unwrapped_resampled[start - 1]
-                x_after = air_tube_unwrapped_resampled[end]
-
-                x_middle = np.linspace(x_before, x_after, end-start + 2)[1:-1]
-                air_tube_unwrapped_resampled[start:end] = x_middle
-
-            # rewrap it
-            air_tube_resampled = wrap_signal(
-                air_tube_unwrapped_resampled, -180, 180)
-            self.data_air_tube = air_tube_resampled
-        else:
-            self.data_air_tube = np.repeat(np.nan, len(self.timestamp_gcamp))
-    
-    def filt_random_noise(self):
-        """
-        Generate a Gaussian white noise signal filtered with an exponential filter.
-        """
-
-        filt_noise = self.filt_func(
-            np.random.normal(0, 1, (len(self.timestamp_behav),)))
-
-        return signal.resample(
-            filt_noise, num=len(self.timestamp_gcamp), t=self.timestamp_behav)[0]
-
-
-class DataLoader(DataLoaderBase):
-    """
-    Class for loading data files corresponding to closed loop experiments.
-    """
-    def __init__(self, trial, vel_filt):
-
-        super(self.__class__, self).__init__()
-
-        # load light time data
-        path_light_times = os.path.join(
-            L.DATA_ROOT, trial.path, trial.file_name_light_times)
-        df_light_times = pd.read_excel(path_light_times, header=None)
-        light_times = list(df_light_times.loc[:, 0])
-
-        # load behavioral data
-        path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.file_name_behav)
-        df_behav = pd.read_csv(path_behav, header=None)
-
-        behav_array_raw = df_behav.as_matrix()[:, :-1].astype(float)
-        frames_behav = behav_array_raw[:, 0]
-        n_cols_behav = behav_array_raw.shape[1]
-
-        # get the section of the behavioral matrix within the light times boundaries
-        within_light_times_mask = (frames_behav >= light_times[0]) * \
-            (frames_behav <= light_times[1])
-        behav_array_raw_cut = behav_array_raw[within_light_times_mask, :]
-
-        # create a new behavioral matrix that will have the proper size
-        data_behav = np.nan * np.zeros(
-            (light_times[1] - light_times[0] + 1, n_cols_behav),)
-        data_behav[behav_array_raw_cut[:, 0].astype(int) - light_times[0], :] = \
-            behav_array_raw_cut
-
-        # now we have a matrix with the theoretical number of frames between the
-        # two light times,
-        # and which has nans for rows corresponding to skipped frames;
-        # we now reset the frame counter relative to the first light time
-        # and fill in the frame numbers
-        # for the missing frames and convert frame counters to time stamps
-
-        data_behav[:, 0] = np.arange(light_times[1] - light_times[0] + 1) * 1./60
-
-        # interpolate nan values for vels and heading
-        data_behav = _interpolate_nans(data_behav)
-
-        # adjust heading so that 0 is directly upwind and convert to degrees
-        data_behav[:, 16] -= np.pi
-        data_behav[:, 16] *= (180/np.pi)
-
-        # load gcamp roi data
-        path_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.file_name_gcamp)
-        df_gcamp = pd.read_csv(path_gcamp, header=None)
-        gcamp_array = df_gcamp.as_matrix()[:, 2:].astype(float).T
-
-        assert gcamp_array.shape[1] == 16
-
-        # load gcamp timestamp data
-        path_gcamp_timestamp = os.path.join(
-            L.DATA_ROOT, trial.path, trial.file_name_gcamp_timestamp)
-        df_gcamp_timestamp = pd.read_csv(path_gcamp_timestamp, header=None)
-        gcamp_timestamp_array = df_gcamp_timestamp.as_matrix().flatten()
-
-        # convert to relative time
-        gcamp_timestamp_array -= gcamp_timestamp_array[0]
-
-        # put them together into a single matrix
-        data_gcamp = np.nan * np.zeros((len(gcamp_array), 17))
-
-        data_gcamp[:, 0] = gcamp_timestamp_array
-        data_gcamp[:, 1:] = gcamp_array
-
-        # load air tube motion data
-        if trial.file_name_air_tube:
-            path_air_tube = os.path.join(
-                L.DATA_ROOT, trial.path, trial.file_name_air_tube)
-            df_air_tube = pd.read_csv(path_air_tube, header=None)
-            temp = df_air_tube.as_matrix().T
-            timestamp_air_tube = temp[:, 0] / 1000.  # convert to s from ms
-
-            data_air_tube = temp[:, 1] - np.pi/2
-            data_air_tube = data_air_tube * 180/np.pi
-            self.contains_air_tube_motion = True
-        elif trial.expt != 'motionless':
-            df_air_tube = None
-            # assume air tube is negative heading
-            timestamp_air_tube = data_behav[:, 0].copy()
-            data_air_tube = data_behav[:, 16].copy()
-            self.contains_air_tube_motion = True
-        else:
-            # make air tube time-series all nans
-            df_air_tube = None
-            timestamp_air_tube = data_behav[:, 0].copy()
-            data_air_tube = np.nan * np.zeros(data_behav[:, 16].shape)
-            self.contains_air_tube_motion = False
-
-        # line up the final timestamps for the gcamp, behavior, and air tube
-        last_t = C.MAX_TRIAL_TIME
-
-        # make sure no data is longer than last_t
-        data_gcamp = data_gcamp[data_gcamp[:, 0] <= last_t, :]
-        data_behav = data_behav[data_behav[:, 0] <= last_t, :]
-        data_air_tube = data_air_tube[timestamp_air_tube <= last_t]
-
-        timestamp_air_tube = timestamp_air_tube[timestamp_air_tube <= last_t]
-
-        # store everything
-        self.df_light_times = df_light_times
-        self.df_behav = df_behav
-        self.df_gcamp = df_gcamp
-        self.df_gcamp_timestamp = df_gcamp_timestamp
-        self.df_air_tube = df_air_tube
-
-        self._data_behav = data_behav
-        self.data_behav = data_behav.copy()
-        self.data_gcamp = data_gcamp
-        self._data_air_tube = data_air_tube
-        self.data_air_tube = data_air_tube.copy()
-        self.timestamp_air_tube = timestamp_air_tube
-
-        self.dt_gcamp = np.mean(np.diff(self.data_gcamp[:, 0]))
-
-        # store gcamp labels
-        self.gcamp_labels = [
-            'G2R', 'G3R', 'G4R', 'G5R',  # gcamp signal on right brain
-            'G2L', 'G3L', 'G4L', 'G5L',  # gcamp signal on left brain
-        ]
-
-        # smooth data with velocity filter
-        self.filt_vel_exp(vel_filt)
-        
-        # resample behavioral data to match gcamp timestamps
-        self.resample_behavioral_data_gcamp_matched()
-        
-        # store walking speed threshold
-        self.walking_threshold = trial.walking_threshold
-        
-    @property
-    def timestamp_behav(self): return self._data_behav[:, 0]
-
-    @property
-    def timestamp_gcamp(self): return self.data_gcamp[:, 0]
-
-    @property
-    def red(self): return self.data_gcamp[:, 1:9]
-
-    @property
-    def green(self): return self.data_gcamp[:, 9:]
-
-    @property
-    def green_red_ratio(self): return self.green / self.red
-
-    @property
-    def gcamp(self): return self.green_red_ratio
-
-    @property
-    def G2L(self): return normalize_by_column(self.gcamp[:, 4])
-
-    @property
-    def G3L(self): return normalize_by_column(self.gcamp[:, 5])
-
-    @property
-    def G4L(self): return normalize_by_column(self.gcamp[:, 6])
-
-    @property
-    def G5L(self): return normalize_by_column(self.gcamp[:, 7])
-
-    @property
-    def G2R(self): return normalize_by_column(self.gcamp[:, 0])
-
-    @property
-    def G3R(self): return normalize_by_column(self.gcamp[:, 1])
-
-    @property
-    def G4R(self): return normalize_by_column(self.gcamp[:, 2])
-
-    @property
-    def G5R(self): return normalize_by_column(self.gcamp[:, 3])
-
-    @property
-    def G2S(self): return self.G2R + self.G2L
+    def t(self): return self.data['TIME'].as_matrix()
     
     @property
-    def G3S(self): return self.G3R + self.G3L
-
-    @property
-    def G4S(self): return self.G4R + self.G4L
-
-    @property
-    def G5S(self): return self.G5R + self.G5L
-
-    @property
-    def G2D(self): return self.G2R - self.G2L
-
-    @property
-    def G3D(self): return self.G3R - self.G3L
-
-    @property
-    def G4D(self): return self.G4R - self.G4L
-
-    @property
-    def G5D(self): return self.G5R - self.G5L
-
-    @property
-    def air_tube(self): return self.data_air_tube
+    def v_lat(self): return self.data['V_LAT'].as_matrix()
     
     @property
-    def states(self): return get_states(self.speed, self.walking_threshold)
+    def v_fwd(self): return self.data['V_FWD'].as_matrix()
     
+    @property
+    def v_ang(self): return self.data['V_ANG'].as_matrix()
+    
+    @property
+    def heading(self): return self.data['HEADING'].as_matrix()
+    
+    @property
+    def air(self): return self.data['AIR'].as_matrix()
+    
+    @property
+    def speed(self): return np.sqrt(self.v_lat**2 + self.v_fwd**2)
+    
+    @property
+    def ball(self): return np.sqrt(self.v_lat**2 + self.v_fwd**2 + self.v_ang**2)
+    
+    @property
+    def state(self): return get_states(self.speed, self.walking_threshold)
+     
+    @property
+    def G2R(self): 
+        return norm_by_col(
+            (self.data['G2R_GREEN']/self.data['G2R_RED']).as_matrix())
+     
+    @property
+    def G3R(self): 
+        return norm_by_col(
+            (self.data['G3R_GREEN']/self.data['G3R_RED']).as_matrix())
+     
+    @property
+    def G4R(self): 
+        return norm_by_col(
+            (self.data['G4R_GREEN']/self.data['G4R_RED']).as_matrix())
+     
+    @property
+    def G5R(self): 
+        return norm_by_col(
+            (self.data['G5R_GREEN']/self.data['G5R_RED']).as_matrix())
+     
+    @property
+    def G2L(self): 
+        return norm_by_col(
+            (self.data['G2L_GREEN']/self.data['G2L_RED']).as_matrix())
+     
+    @property
+    def G3L(self): 
+        return norm_by_col(
+            (self.data['G3L_GREEN']/self.data['G3L_RED']).as_matrix())
+     
+    @property
+    def G4L(self): 
+        return norm_by_col(
+            (self.data['G4L_GREEN']/self.data['G4L_RED']).as_matrix())
+     
+    @property
+    def G5L(self): 
+        return norm_by_col(
+            (self.data['G5L_GREEN']/self.data['G5L_RED']).as_matrix())
 
-def _interpolate_nans(data):
+
+# auxiliary functions used by DataLoader
+
+def load_gcamp(trial):
     """
-    Interpolate the values of the nans for vel (cols 5, 6, 7) and heading (col 16).
-    :param data: data array
-    :return: data array with nans interpolated
+    Load and return the gcamp time vector, in seconds and starting from 0,
+    and the gcamp fluorescence matrix.
     """
+    # build paths
+    path_t_gcamp = os.path.join(
+        L.DATA_ROOT, trial.path, trial.file_t_gcamp)
+    path_gcamp = os.path.join(
+        L.DATA_ROOT, trial.path, trial.file_gcamp)
+    
+    # load data
+    t_gcamp = pd.read_csv(path_t_gcamp, header=None).as_matrix()[0]
+    gcamp = pd.read_csv(path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
 
-    # find all nan segments
-    nan_segs = find_segs(np.isnan(data[:, 1]))
+    if not len(t_gcamp) == len(g_camp):
+        raise Exception('Time vector and GCaMP vector must be equal lengths.')
+        
+    # convert time vector to relative time
+    t_gcamp -= t_gcamp[0]
 
-    # loop over all nan groups and interpolate
-    for nan_seg in nan_segs:
+    return t_gcamp, gcamp
 
-        # make up x-coordinates of surrounding data points
-        xp = np.array([nan_seg[0] - 1, nan_seg[1]])
 
-        # interpolate vel
-        for col in range(5, 8):
+def load_behav(trial):
+    """
+    Load and return behavioral time vector, in seconds and starting from 0,
+    and behavioral data matrix including three velocity components and heading.
+    """
+    # build paths
+    path_light = os.path.join(L.DATA_ROOT, trial.path, trial.file_light)
+    path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.file_behav)
+    
+    # get start and end frames from light times file
+    start, end = pd.read_excel(path_light, header=None).ax_matrix().flatten()
 
-            # get y-coordinates of surrounding data points
-            fp = np.nan * np.zeros((2,))
+    # load raw behav data
+    behav_ = pd.read_csv(path_behav, header=None).as_matrix()
 
-            if xp[0] >= 0: fp[0] = data[xp[0], col]
-            else: fp[0] = data[xp[1], col]
+    # create mask selecting frames between two light times
+    frame_ctrs = behav_[:, C.COLS_FICTRAC['FRAME_CTR']]
+    mask = (start <= frame_ctrs) & (frame_ctrs < end)
+    
+    # get time vector and behav data selected by mask
+    t_behav = frame_ctrs[mask] * C.DT_FICTRAC
+    
+    # order columns for final behav matrix
+    cols = [None for _ in range(C.N_COLS_BEHAV)]
+    for vbl, col in C.COLS_BEHAV.items():
+        cols[col] = C.COLS_FICTRAC[vbl]
+        
+    behav = behav_[mask, cols]
+   
+    # convert time vector to relative time
+    t_behav -= t_behav[0]
+    
+    # correct heading so 0 is uw and angles are in deg
+    behav[:, C.COLS_BEHAV['HEADING']] -= np.pi
+    behav[:, C.COLS_BEHAV['HEADING']] *= (180/np.pi)
+    
+    return t_behav, behav
 
-            if xp[1] < len(data): fp[1] = data[xp[1], col]
-            else: fp[1] = data[xp[0], col]
 
-            data[nan_seg[0]:nan_seg[1], col] = np.interp(np.arange(*nan_seg), xp, fp)
+def load_air(trial, t_behav=None, behav=None):
+    """
+    Load air tube time vector, in seconds and starting at 0,
+    and corresponding air tube angle data.
+    
+    If trial is closed loop trial, t_behav and behav must be provided.
+    If trial is no-air trial, t_behav must be provided.
+    """
+    if trial.expt in [C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
+        
+        # build path and load air_tube file
+        path_air = os.path.join(L.DATA_ROOT, trial.path, trial.file_air)
+        t_air, air = pd.read_csv(path_air).as_matrix()
+        
+        # convert time vector to relative time in seconds
+        t_air /= 1000.
+        t_air -= t_air[0]
+        
+        # correct air tube so 0 is in front of fly and angles are in deg
+        air -= np.pi/2
+        air *= (180/np.pi)
+        
+    elif trial.expt == C.EXPTS['CLOSED_LOOP']:
+        
+        # make air tube signal equal to behavioral heading signal
+        if (t_behav is None) or (behav is None):
+            raise Exception('Both "t_behav" and "behav" must be provided for closed loop trials.')
+        
+        t_air = t_behav
+        air = behav[:, C.COLS_BEHAV['HEADING']]
+        
+    elif trial.expt == C.EXPTS['NO_AIR']:
+        
+        # make air tube signal all NaNs
+        if t_behav is None:
+            raise Exception('"t_behav" must be provided for no_air trials.')
+        
+        t_air = t_behav
+        air = np.nan * np.ones(len(t_behav))
+        
+    else:
+        raise Exception('Expt "{}" not found in config.'.format(trial.expt))
+    
+    return t_air, air
 
-        # interpolate heading
-        # get y-coordinates of surrounding data points
-        fp = np.nan * np.zeros((2,))
 
-        if xp[0] >= 0: fp[0] = data[xp[0], 16]
-        else: fp[0] = data[xp[1], 16]
-
-        if xp[1] < len(data): fp[1] = data[xp[1], 16]
-        else: fp[1] = data[xp[0], 16]
-
-        # if heading jumps between near pi and near 2*pi, transform before interpolating
-        if np.abs(fp[1] - fp[0]) > (3 * np.pi / 2):
-            fp[fp < 0] += (2 * np.pi)
-            interp = np.interp(np.arange(*nan_seg), xp, fp)
-            interp[interp > np.pi] -= (2 * np.pi)
-
+def avg_or_interp(t, x, w, cols_ang):
+    """
+    Return the averaged or interpolated value of an array or matrix
+    between two time values.
+    
+    If at least one non-nan value exists in x between in the time window
+    specified by w[0] and w[1], the mean of these values will be returned.
+    
+    If no values exist in the time window, a linear interpolation is performed
+    between the two nearest existing values.
+    
+    :param t: time vector
+    :param x: data vector/matrix
+    :param w: time window to average/interpolate (t_0, t_1)
+    :param cols_ang: which cols in x correspond to angular variables defined only
+        from -180 to 180, which must be "unwrapped" before avg'ing/interp'ing
+    :return: avg'ed/interp'ed value(s) of x
+    """
+    
+    if len(t) != len(x):
+        raise Exception('"t" and "x" must be the same length')
+        
+    if x.ndim == 1:
+        x = x[:, None]
+        
+    if cols_ang is None:
+        cols_ang = []
+    
+    # select x for times between t_0 and t_1
+    mask = (t >= t_0) & (t < t_1)
+    x_mask = x[mask]
+    
+    # loop over columns of x
+    y = np.nan * np.ones(x.shape[1])
+    
+    for col_ctr, x_ in enumerate(x_mask.T):
+        
+        if col_ctr in cols_ang:
+            x_ = unwrap(x_, *C.LIMS_ANG)
+            
+        if sum(~np.isnan(x_)) > 0:
+            # take average if at least 1 non-nan val exists
+            y_ = np.nanmean(x_)
+            
         else:
-            interp = np.interp(np.arange(*nan_seg), xp, fp)
+            # find closest non-nan val before t_0
+            t_before = t[t < t_0]
+            x_before = x[t < t_0, col_ctr]
+            mask_before = ~np.isnan(x_before)
+            
+            try:
+                t_0_ = t_before[mask_before][-1]
+                x_0 = x_before[mask_before][-1]
+            except IndexError:
+                t_0_ = np.nan
+                x_0 = np.nan
+                
+            # find closest non-nan val after t_1
+            t_after = t[t >= t_1]
+            x_after = x[t >= t_1, col_ctr]
+            mask_after = ~np.isnan(x_after)
+            
+            try:
+                t_1_ = t_after[mask_after][0]
+                x_1 = x_after[mask_after][0]
+            except IndexError:
+                t_1_ = np.nan
+                x_1 = np.nan
+                
+            if any(np.isnan([x_0, x_1])):
+                y_ = np.nan
+            else:
+                # linearly interpolate between x_0 and x_1
+                if col_ctr in cols_ang:
+                    x_0, x_1 = unwrap(np.array([x_0, x_1]), *C.LIMS_ANG)
+                    
+                slp = (x_1 - x_0) / (t_1_ - t_0_)  # slope
+                y_ = x_0 + slp * (np.mean(t_0, t_1) - t_0_)
+                
+        if col_ctr in cols_ang:
+            y_ = wrap(np.array([y_]), *C.LIMS_ANG)[0]
+            
+        y[col_ctr] = y_
+            
+    if len(y) > 1:
+        return y
+    else:
+        return y[0]
 
-        data[nan_seg[0]:nan_seg[1], 16] = interp
 
-    return data
+def wrap(x, x_min, x_max):
+    """
+    Wrap a time-series signal so that it becomes modular.
+
+    :param x: 1D array
+    :param x_min: min value of time-series
+    :param x_max: max value of time-series
+    :return: wrapped signal
+    """
+
+    assert x_max > x_min
+
+    # shift signal so that x_min is at 0
+    x_shifted = x - x_min
+
+    # mod signal by desired range
+    x_shifted %= (x_max - x_min)
+
+    # return inverse-shifted signal
+    return x_shifted + x_min
+
+
+def unwrap(x, x_min, x_max):
+    """
+    Unwrap a modular time-series signal so derivatives are still meaningful
+    when signal crosses mod threshold.
+
+    :param x: 1D array
+    :param x_min: min value of time-series
+    :param x_max: max value of time-series
+    :return: unwrapped signal
+    """
+    th_jump = 0.5  # pcnt of range signal must change by to assume it jumped
+    
+    x = x.copy()
+    assert x_max > x_min
+
+    x_range = x_max - x_min
+    diff = np.diff(x)
+    cc = np.concatenate
+
+    # get all boundary crossings
+    down_jumps = cc([[0.], (diff < (-th_jump * x_range)).astype(float)])
+    up_jumps = cc([[0.], (diff > (th_jump * x_range)).astype(float)])
+
+    down_ctrs = down_jumps.cumsum()
+    up_ctrs = up_jumps.cumsum()
+
+    offset_ctr = down_ctrs - up_ctrs
+    x_shifted = x - x_min
+    x_shifted += offset_ctr * x_range
+
+    return x_shifted + x_min
+
+
+def get_states(speed, threshold):
+    """
+    Infer the fly's state at each time point from its walking speed.
+    
+    :param speed: walking speed time-series
+    :param threshold: walking speed threshold
+    """
+    
+    segs_paused = find_segs(speed < threshold)
+    
+    # eliminate paused segs less than min paused times
+    segs_paused = np.array([seg for seg in segs_paused if seg[1] - seg[0] >= int(P.T_PAUSE_MIN/C.DT)])
+    
+    if len(segs_paused) == 0:
+        return np.repeat('W', len(speed))
+    
+    # get walking segs
+    segs_walk = get_seg_complement(segs_paused, len(speed))
+    
+    # buffer segments to allow for ambiguous states
+    segs_paused[:, 0] += int(P.T_PAUSE_CUSH_INNER/C.DT)
+    segs_paused[:, 1] -= int(P.T_PAUSE_CUSH_INNER/C.DT)
+    segs_walk[:, 0] += int(P.T_PAUSE_CUSH_OUTER/C.DT)
+    segs_walk[:, 1] -= int(P.T_PAUSE_CUSH_OUTER/C.DT)
+    
+    # ensure all segs are bounded by the time-series end points
+    segs_paused[segs_paused < 0] = 0
+    segs_paused[segs_paused > len(speed)] = len(speed)
+    segs_walk[segs_walk < 0] = 0
+    segs_walk[segs_walk > len(speed)] = len(speed)
+    
+    # remove any segments with a correct length <= 0
+    segs_paused = np.array([seg for seg in segs_paused if seg[1] - seg[0] > 0])
+    segs_walk = np.array([seg for seg in segs_walk if seg[1] - seg[0] > 0])
+    
+    # start with default ambiguous ('A') labels then fill in paused ('P')
+    # and walking ('W') labels
+    labels = np.repeat('A', len(speed))
+    labels[segs_to_bool(segs_paused, len(speed))] = 'P'
+    labels[segs_to_bool(segs_walk, len(speed))] = 'W'
+    
+    return labels
 
 
 def find_segs(x):
@@ -547,51 +552,28 @@ def segs_to_bool(segs, end):
             mask[seg[0]:seg[1]] = True
             
     return mask
-    
-    
-def get_states(speed, threshold):
-    """
-    Infer the fly's state at each time point from its walking speed.
-    
-    :param speed: walking speed time-series
-    :param threshold: walking speed threshold
-    """
-    
-    segs_paused = find_segs(speed < threshold)
-    
-    # eliminate paused segs less than min paused times
-    segs_paused = np.array([seg for seg in segs_paused if seg[1] - seg[0] >= int(P.T_PAUSE_MIN/C.DT)])
-    
-    if len(segs_paused) == 0:
-        return np.repeat('W', len(speed))
-    
-    # get walking segs
-    segs_walk = get_seg_complement(segs_paused, len(speed))
-    
-    # buffer segments to allow for ambiguous states
-    segs_paused[:, 0] += int(P.T_PAUSE_CUSH_INNER/C.DT)
-    segs_paused[:, 1] -= int(P.T_PAUSE_CUSH_INNER/C.DT)
-    segs_walk[:, 0] += int(P.T_PAUSE_CUSH_OUTER/C.DT)
-    segs_walk[:, 1] -= int(P.T_PAUSE_CUSH_OUTER/C.DT)
-    
-    # ensure all segs are bounded by the time-series end points
-    segs_paused[segs_paused < 0] = 0
-    segs_paused[segs_paused > len(speed)] = len(speed)
-    segs_walk[segs_walk < 0] = 0
-    segs_walk[segs_walk > len(speed)] = len(speed)
-    
-    # remove any segments with a correct length <= 0
-    segs_paused = np.array([seg for seg in segs_paused if seg[1] - seg[0] > 0])
-    segs_walk = np.array([seg for seg in segs_walk if seg[1] - seg[0] > 0])
-    
-    # start with default ambiguous ('A') labels then fill in paused ('P')
-    # and walking ('W') labels
-    labels = np.repeat('A', len(speed))
-    labels[segs_to_bool(segs_paused, len(speed))] = 'P'
-    labels[segs_to_bool(segs_walk, len(speed))] = 'W'
-    
-    return labels
 
+
+def norm_by_col(data):
+    """
+    Normalize each column of a data matrix by subtracting its mean
+    and dividing by its std.
+    """
+    data_normed = np.nan * np.zeros(data.shape)
+
+    if data.ndim == 1:
+        col_zeroed = data - np.nanmean(data)
+        data_normed = col_zeroed / np.nanstd(col_zeroed)
+
+    else:
+        for ctr in range(data.shape[1]):
+            col_zeroed = data[:, ctr] - np.nanmean(data[:, ctr])
+            data_normed[:, ctr] = col_zeroed / np.nanstd(col_zeroed)
+
+    return data_normed
+    
+
+# other auxiliary functions
 
 def split_at_nans(x, min_len, mode='any'):
     """
@@ -631,56 +613,6 @@ def split_at_nans(x, min_len, mode='any'):
             segs.append(seg)
 
     return segs, masks
-
-
-def normalize_by_column(data):
-    """
-    Normalize each column of a data matrix by subtracting its mean
-    and dividing by its std.
-    """
-    data_normed = np.nan * np.zeros(data.shape)
-
-    if data.ndim == 1:
-        col_zeroed = data - np.nanmean(data)
-        data_normed = col_zeroed / np.nanstd(col_zeroed)
-
-    else:
-        for ctr in range(data.shape[1]):
-            col_zeroed = data[:, ctr] - np.nanmean(data[:, ctr])
-            data_normed[:, ctr] = col_zeroed / np.nanstd(col_zeroed)
-
-    return data_normed
-
-
-def standardize_std_by_column(data):
-    """
-    Divide each column of a data matrix by its std. Note that the mean
-    is left as it is.
-    """
-    data_normed = np.nan * np.zeros(data.shape)
-
-    if data.ndim == 1:
-        data_normed = data / np.nanstd(data)
-
-    else:
-        for ctr in range(data.shape[1]):
-            data_normed[:, ctr] = data[:, ctr] / np.nanstd(data[:, ctr])
-
-    return data_normed
-
-
-def normalize_if_not_heading(data, label):
-    """
-    Normalize an array if its label does not include 'heading' or 'wind_dir'.
-    :param data: 1D array
-    :param label: string
-    """
-    is_heading_var = ('heading' in label) or ('wind_dir' in label)
-
-    if not is_heading_var: sig = normalize_by_column(data[:, None])[:, 0]
-    else: sig = data.copy()
-
-    return sig
 
 
 def shift_circular(x, shift_amount):
@@ -739,67 +671,12 @@ def phase_shift(x, phase):
     return x_shifted
 
 
-def wrap_signal(x, x_min, x_max):
-    """
-    Wrap a time-series signal so that it becomes modular.
-
-    :param x: 1D array
-    :param x_min: min value of time-series
-    :param x_max: max value of time-series
-    :return: wrapped signal
-    """
-
-    assert x_max > x_min
-
-    # shift signal so that x_min is at 0
-    x_shifted = x - x_min
-
-    # mod signal by desired range
-    x_shifted %= (x_max - x_min)
-
-    # return inverse-shifted signal
-    return x_shifted + x_min
-
-
-def unwrap_signal(x, x_min, x_max, jump_threshold=0.75):
-    """
-    Unwrap a modular time-series signal, e.g., so derivatives are meaningful.
-
-    :param x: 1D array
-    :param x_min: min value of time-series
-    :param x_max: max value of time-series
-    :param jump_threshold: threshold (as proportion of min/max range) for defining
-        a min/max boundary crossing
-    :return: unwrapped signal
-    """
-
-    x = x.copy()
-    assert x_max > x_min
-
-    x_range = x_max - x_min
-    diff = np.diff(x)
-    cc = np.concatenate
-
-    # get all boundary crossings
-    down_jumps = cc([[0.], (diff < (-jump_threshold * x_range)).astype(float)])
-    up_jumps = cc([[0.], (diff > (jump_threshold * x_range)).astype(float)])
-
-    down_ctrs = down_jumps.cumsum()
-    up_ctrs = up_jumps.cumsum()
-
-    offset_ctr = down_ctrs - up_ctrs
-    x_shifted = x - x_min
-    x_shifted += offset_ctr * x_range
-
-    return x_shifted + x_min
-
-
 def slice_by_time(t, x, t_ranges):
     """
     Slice a series of data according to a set of time-ranges.
     :param t: time vector
     :param x: data (2D array with rows as time points)
-    :param t_ranges: time range for slicing each x
+    :param t_ranges: list of time ranges for slicing x
     :return: list of slices of x
     """
 
@@ -811,7 +688,7 @@ def slice_by_time(t, x, t_ranges):
     return x_sliced
 
 
-def normalize_by_column_multi(xs):
+def norm_by_col_multi(xs):
     """
     Normalize a data set by calculating mean and std across multiple data sets.
     :param xs: list of 1D or 2D arrays
@@ -828,47 +705,6 @@ def normalize_by_column_multi(xs):
         split_idxs = np.cumsum(xs_lens)[:-1]
 
         return np.split(xs_cc_normed, split_idxs, axis=0)
-
-
-def lowpass_params_from_attr(attr):
-
-    r = re.search('lowpass_([\d.]+)s_(.*)', attr)
-
-    cut_t = float(r.group(1))
-    remaining = r.group(2)
-
-    return cut_t, remaining
-
-
-def bandpass_params_from_attr(attr):
-
-    r = re.search('bandpass_([\d.]+)s_([\d.]+)s_(.*)', attr)
-
-    low = float(r.group(1))
-    high = float(r.group(2))
-    remaining = r.group(3)
-
-    return low, high, remaining
-
-
-def lmp_params_from_attr(attr):
-
-    r = re.search('lmp\((.+)\|(.+)\)', attr)
-
-    target = r.group(1)
-    predictors = r.group(2).split(',')
-
-    return target, predictors
-
-
-def ar_params_from_attr(attr):
-
-    r = re.search('ARP_(\d*)_(.*)', attr)
-
-    n_steps = int(r.group(1))
-    remaining = r.group(2)
-
-    return n_steps, remaining
 
 
 def exp_filt(t, x, amp, tau, t_max_filt):
@@ -903,89 +739,3 @@ def exp_filt(t, x, amp, tau, t_max_filt):
     # return filtered signal, filter time vector, and filter
     
     return y, t_filt, filt
-
-   
-#### DEPRECATED (FOR LOADING OLD 4-COMPARTMENT DATASETS) ####
-
-class DataLoaderDeprecated(DataLoaderBase):
-    """
-    Class for loading data files.
-    """
-    def __init__(self, trial):
-
-        super(self.__class__, self).__init__()
-
-        path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.file_name_behav)
-        self.df_behav = pd.read_csv(path_behav, header=None)
-        self._data_behav = self.df_behav.as_matrix()[:, :-1].astype(float)
-
-        # convert behavioral time stamps to seconds
-        self._data_behav[:, 21] /= 1000
-
-        path_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.file_name_gcamp)
-        self.df_gcamp = pd.read_csv(path_gcamp, header=None)
-        self.data_gcamp = self.df_gcamp.as_matrix().T.astype(float)
-
-        # make sure that last behavioral time stamp is as close as possible to last
-        # gcamp time stamp
-
-        self.data_gcamp = self.data_gcamp[self.data_gcamp[:, 0] < C.MAX_TRIAL_TIME, :]
-        self._data_behav = self._data_behav[self._data_behav[:, 21] < C.MAX_TRIAL_TIME, :]
-        self.dt_gcamp = np.mean(np.diff(self.data_gcamp[:, 0]))
-
-        # normalize heading to have 0 be "upwind" and to be in degrees
-        self._data_behav[:, 16] -= np.pi
-        self._data_behav[:, 16] *= (180 / np.pi)
-
-        # make copy of data for public access
-        self.data_behav = self._data_behav.copy()
-        self.contains_air_tube_motion = False
-        
-        # smooth data with velocity filter
-        self.filt_vel_exp(vel_filt)
-        
-        # resample behavioral data to match gcamp timestamps
-        self.resample_behavioral_data_gcamp_matched()
-
-
-    @property
-    def timestamp_behav(self): return self._data_behav[:, 21]
-    
-    @property
-    def timestamp_gcamp(self): return self.data_gcamp[:, 0]
-
-    @property
-    def red(self): return self.data_gcamp[:, 1:5]
-
-    @property
-    def green(self): return self.data_gcamp[:, 5:9]
-
-    @property
-    def green_red_ratio(self): return self.green / self.red
-
-    @property
-    def gcamp(self): return self.green_red_ratio
-
-    @property
-    def G2(self): return normalize_by_column(self.gcamp[:, 0])
-
-    @property
-    def G3(self): return normalize_by_column(self.gcamp[:, 1])
-
-    @property
-    def G4(self): return normalize_by_column(self.gcamp[:, 2])
-
-    @property
-    def G5(self): return normalize_by_column(self.gcamp[:, 3])
-
-    @property
-    def G2R(self): return normalize_by_column(self.gcamp[:, 0])
-
-    @property
-    def G3R(self): return normalize_by_column(self.gcamp[:, 1])
-
-    @property
-    def G4R(self): return normalize_by_column(self.gcamp[:, 2])
-
-    @property
-    def G5R(self): return normalize_by_column(self.gcamp[:, 3])
