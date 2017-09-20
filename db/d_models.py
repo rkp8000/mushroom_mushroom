@@ -8,9 +8,9 @@ from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
 
-class Trial(Base):
+class TrialNew(Base):
 
-    __tablename__ = 'trial'
+    __tablename__ = 'trial_new'
 
     id = Column(Integer, primary_key=True)
     

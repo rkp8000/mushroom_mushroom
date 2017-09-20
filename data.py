@@ -78,6 +78,11 @@ class DataLoader(object):
                     t_behav, behav, w, cols_ang=[C.COLS_BEHAV['HEADING']])
                 data_[t_ctr, C.COL_SLICE_AIR] = avg_or_interp(
                     t_air, air, w, cols_ang=[0])
+                
+            # calc v_air from downsampled air if driven expt
+            if trial.expt in [C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
+                data_[:, dict(C.COLS_FINAL)['V_AIR']] \
+                    = np.gradient(data_[:, dict(C.COLS_FINAL)['AIR']]) / np.gradient(t)
             
             # convert to data frame
             data = pd.DataFrame()
@@ -304,13 +309,18 @@ def load_air(trial, t_behav=None, behav=None):
         path_air = os.path.join(L.DATA_ROOT, trial.path, trial.file_air)
         t_air, air = pd.read_csv(path_air, header=None).as_matrix()
         
-        # convert time vector to relative time in seconds
+        # convert time vector to in seconds and add 0 s initial time
+        # with corresponding NaN value for air
         t_air /= 1000.
-        t_air -= t_air[0]
+        t_air = np.concatenate([[0], t_air])
+        air = np.concatenate([[np.nan], air])
         
         # correct air tube so 0 is in front of fly and angles are in deg
         air -= np.pi/2
         air *= (180/np.pi)
+        
+        # don't calc air tube vel. until we've downsampled it
+        v_air = np.nan * np.ones(len(t_air))
         
     elif trial.expt == C.EXPTS['CLOSED_LOOP']:
         
@@ -321,6 +331,9 @@ def load_air(trial, t_behav=None, behav=None):
         t_air = t_behav
         air = behav[:, C.COLS_BEHAV['HEADING']]
         
+        # calc air tube vel
+        v_air = np.gradient(unwrap(air, *C.LIMS_ANG)) / np.gradient(t_behav)
+        
     elif trial.expt == C.EXPTS['NO_AIR']:
         
         # make air tube signal all NaNs
@@ -329,12 +342,10 @@ def load_air(trial, t_behav=None, behav=None):
         
         t_air = t_behav
         air = np.nan * np.ones(len(t_behav))
+        v_air = np.nan * np.ones(len(t_behav))
         
     else:
         raise Exception('Expt "{}" not found in config.'.format(trial.expt))
-    
-    # calculate air tube velocity
-    v_air = np.gradient(unwrap(air, *C.LIMS_ANG)) / C.DT_AIR
     
     return t_air, np.array([air, v_air]).T
 
