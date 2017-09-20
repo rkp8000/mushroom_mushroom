@@ -191,6 +191,38 @@ class DataLoader(object):
     def g5l(self): 
         return norm_by_col(
             (self.data['G5L_GREEN']/self.data['G5L_RED']).as_matrix())
+    
+    @property
+    def g2s(self):
+        return norm_by_col(self.g2r + self.g2l)
+ 
+    @property
+    def g3s(self):
+        return norm_by_col(self.g3r + self.g3l)
+ 
+    @property
+    def g4s(self):
+        return norm_by_col(self.g4r + self.g4l)
+ 
+    @property
+    def g5s(self):
+        return norm_by_col(self.g5r + self.g5l)
+
+    @property
+    def g2d(self):
+        return norm_by_col(self.g2r - self.g2l)
+ 
+    @property
+    def g3d(self):
+        return norm_by_col(self.g3r - self.g3l)
+ 
+    @property
+    def g4d(self):
+        return norm_by_col(self.g4r - self.g4l)
+ 
+    @property
+    def g5d(self):
+        return norm_by_col(self.g5r - self.g5l)
 
 
 # auxiliary functions used by DataLoader
