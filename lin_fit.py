@@ -47,7 +47,7 @@ def classify_states(trial, preds, windows):
     except:
         trial.dl = DataLoader(trial, vel_filt=None)
     
-    states = trial.dl.states
+    states = trial.dl.state
     vs = {pred: getattr(trial.dl, pred) for pred in preds}
     
     # make extended dan predictor matrix
