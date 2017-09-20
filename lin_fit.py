@@ -208,14 +208,14 @@ def reconstruct(trial, windows):
     
     :param trial: trial object
     :param windows: dict of windows to use for reconstruction; it should have keys
-        {'state', 'speed', 'v_ang', 'ddt_air_tube'}, and corresponding values should be
+        {'state', 'speed', 'v_ang', 'v_air'}, and corresponding values should be
         dict indicating predictor names and windows (tuple specifying start and end time point)
     :return ReconstructionResult instance
     """
-    if not set(windows) == {'state', 'speed', 'v_ang', 'ddt_air_tube'}:
+    if not set(windows) == {'state', 'speed', 'v_ang', 'v_air'}:
         raise KeyError(
             'Predictor windows must be specified for keys "state", '
-            '"speed", "v_ang", and "ddt_air_tube".')
+            '"speed", "v_ang", and "v_air".')
     
     preds = {k: w.keys() for k, w in windows.items()}
     
@@ -223,22 +223,22 @@ def reconstruct(trial, windows):
     clf_rslt = classify_states(trial, preds['state'], windows['state'])
     
     # create valid mask of walking states
-    valid = trial.dl.states == 'W'
+    valid = trial.dl.state == 'W'
     
-    # fit regression models for speed, v_ang, and ddt_air_tube
+    # fit regression models for speed, v_ang, and v_air
     rgr_rslts = {
         'speed': regress(trial, targ='speed', preds=preds['speed'], windows=windows['speed'], valid=valid),
         'v_ang': regress(trial, targ='v_ang', preds=preds['v_ang'], windows=windows['v_ang'], valid=valid),
     }
     
     if trial.expt == 'closed_loop':
-        rgr_rslts['ddt_air_tube'] = regress(
-            trial, targ='ddt_air_tube', preds=preds['ddt_air_tube'], windows=windows['ddt_air_tube'], valid=valid)
+        rgr_rslts['v_air'] = regress(
+            trial, targ='v_air', preds=preds['v_air'], windows=windows['v_air'], valid=valid)
     elif trial.expt == 'driven_random':
-        rgr_rslts['ddt_air_tube'] = regress(
-            trial, targ='ddt_air_tube', preds=preds['ddt_air_tube'], windows=windows['ddt_air_tube'], valid='all')
+        rgr_rslts['v_air'] = regress(
+            trial, targ='v_air', preds=preds['v_air'], windows=windows['v_air'], valid='all')
     else:
-        rgr_rslts['ddt_air_tube'] = None
+        rgr_rslts['v_air'] = None
         
     # make predictions
     xs = {}
@@ -249,10 +249,10 @@ def reconstruct(trial, windows):
         xs[key] = {pr: getattr(trial.dl, pr) for pr in preds[key]}
         xs_extd[key] = make_extended_predictor_matrix(xs[key], windows[key], order=preds[key])
     
-    if trial.expt != 'motionless':
-        xs['ddt_air_tube'] = {pr: getattr(trial.dl, pr) for pr in preds['ddt_air_tube']}
-        xs_extd['ddt_air_tube'] = make_extended_predictor_matrix(
-            xs['ddt_air_tube'], windows['ddt_air_tube'], order=preds['ddt_air_tube'])
+    if trial.expt != 'no_air':
+        xs['v_air'] = {pr: getattr(trial.dl, pr) for pr in preds['v_air']}
+        xs_extd['v_air'] = make_extended_predictor_matrix(
+            xs['v_air'], windows['v_air'], order=preds['v_air'])
         
     # states
     valid['state'] = np.all(~np.isnan(xs_extd['state']), axis=1)
@@ -279,38 +279,38 @@ def reconstruct(trial, windows):
     v_ang_pred[valid['v_ang']] = rgr_rslts['v_ang'].rgr.predict(xs_extd['v_ang'][valid['v_ang']])
     
     # air tube
-    ddt_air_tube_pred = np.repeat(np.nan, len(trial.dl.states))
+    v_air_pred = np.repeat(np.nan, len(trial.dl.state))
     
-    if trial.expt == 'motionless':
+    if trial.expt == 'no_air':
         # everything nan since no air tube motion
-        valid['ddt_air_tube'] = np.repeat(False, len(trial.dl.states))
+        valid['v_air'] = np.repeat(False, len(trial.dl.state))
     elif trial.expt == 'closed_loop':
         # predictors must exist and fly must be walking
-        valid['ddt_air_tube'] = np.all(~np.isnan(xs_extd['ddt_air_tube']), axis=1) & (states_pred == 'W')
-        # set paused ddt_air_tube to 0
-        ddt_air_tube_pred[states_pred == 'P'] = 0
+        valid['v_air'] = np.all(~np.isnan(xs_extd['v_air']), axis=1) & (states_pred == 'W')
+        # set paused v_air to 0
+        v_air_pred[states_pred == 'P'] = 0
     elif trial.expt == 'driven_random':
         # predictors must exist but fly can be in any state
-        valid['ddt_air_tube'] = np.all(~np.isnan(xs_extd['ddt_air_tube']), axis=1)
+        valid['v_air'] = np.all(~np.isnan(xs_extd['v_air']), axis=1)
         
-    if trial.expt != 'motionless':
-        # predict ddt_air_tube during valid epochs
-        ddt_air_tube_pred[valid['ddt_air_tube']] = rgr_rslts['ddt_air_tube'].rgr.predict(
-            xs_extd['ddt_air_tube'][valid['ddt_air_tube']])
+    if trial.expt != 'no_air':
+        # predict v_air during valid epochs
+        v_air_pred[valid['v_air']] = rgr_rslts['v_air'].rgr.predict(
+            xs_extd['v_air'][valid['v_air']])
         
     rcn_rslt = ReconstructionResult(
         trial_id=trial.id, windows=windows, clf_rslt=clf_rslt, rgr_rslts=rgr_rslts,
         ys={
-            'state': trial.dl.states,
+            'state': trial.dl.state,
             'speed': trial.dl.speed,
             'v_ang': trial.dl.v_ang,
-            'ddt_air_tube': trial.dl.ddt_air_tube,
+            'v_air': trial.dl.v_air,
         },
         ys_pred={
             'state': states_pred,
             'speed': speed_pred,
             'v_ang': v_ang_pred,
-            'ddt_air_tube': ddt_air_tube_pred,
+            'v_air': v_air_pred,
         })
     
     return rcn_rslt
