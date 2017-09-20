@@ -18,6 +18,16 @@ def shade(ax, segs, rgba):
     
     return ax
 
+
+def unity_line(ax, x_min, x_max, **kwargs):
+    """
+    Plot a unity line on an axis object.
+    """
+    xs = [x_min, x_max]
+    ax.plot(xs, xs, **kwargs)
+    
+    return ax
+
         
 def set_font_size(ax, font_size, legend_font_size=None):
     """Set fontsize of all axis text objects to specified value."""
