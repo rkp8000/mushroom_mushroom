@@ -8,6 +8,8 @@ import re
 from scipy import signal
 from scipy import stats
 
+from db import d_models, make_session
+
 import CONFIG as C
 import PARAMS as P
 import LOCAL_SETTINGS as L
@@ -36,7 +38,7 @@ class DataLoader(object):
             print(
                 'Loading clean data from file "{}"...'.format(
                 os.path.basename(path_clean)))
-            self.data = pd.read_csv(path_clean)
+            data = pd.read_csv(path_clean)
         else:
             print(
                 'Loading and cleaning data from directory "{}"...'.format(
@@ -68,15 +70,14 @@ class DataLoader(object):
             # loop over all timepoints one-by-one, filling in their corresponding
             # values by averaging/interpolating the raw data
             for t_ctr, t_ in enumerate(t):
-                t_0 = t_ - C.DT/2
-                t_1 = t_ + C.DT/2
+                w = (t_ - C.DT/2, t_ + C.DT/2)
                 
                 data_[t_ctr, C.COL_SLICE_GCAMP] = avg_or_interp(
-                    t_gcamp, gcamp, t_0, t_1, cols_ang=None)
+                    t_gcamp, gcamp, w, cols_ang=None)
                 data_[t_ctr, C.COL_SLICE_BEHAV] = avg_or_interp(
-                    t_behav, behav, t_0, t_1, cols_ang=[C.COLS_BEHAV['HEADING']])
-                data_[t_ctr, C.COL_AIR] = avg_or_interp(
-                    t_air, air, t_0, t_1, cols_ang=[0])
+                    t_behav, behav, w, cols_ang=[C.COLS_BEHAV['HEADING']])
+                data_[t_ctr, C.COL_SLICE_AIR] = avg_or_interp(
+                    t_air, air, w, cols_ang=[0])
             
             # convert to data frame
             data = pd.DataFrame()
@@ -110,9 +111,9 @@ class DataLoader(object):
             if remaining in C.WRAPPED_ANG_VARS:
                 # unwrap before taking gradient
                 data_unwrapped = unwrap_signal(getattr(self, remaining), -180, 180)
-                return np.gradient(data_unwrapped) / self.dt_gcamp
+                return np.gradient(data_unwrapped) / C.DT
             else:
-                return np.gradient(getattr(self, remaining)) / self.dt_gcamp
+                return np.gradient(getattr(self, remaining)) / C.DT
             
         if attr.startswith('neg_'):
             remaining = attr[4:]
@@ -140,6 +141,9 @@ class DataLoader(object):
     def air(self): return self.data['AIR'].as_matrix()
     
     @property
+    def v_air(self): return self.data['V_AIR'].as_matrix()
+    
+    @property
     def speed(self): return np.sqrt(self.v_lat**2 + self.v_fwd**2)
     
     @property
@@ -149,42 +153,42 @@ class DataLoader(object):
     def state(self): return get_states(self.speed, self.walking_threshold)
      
     @property
-    def G2R(self): 
+    def g2r(self): 
         return norm_by_col(
             (self.data['G2R_GREEN']/self.data['G2R_RED']).as_matrix())
      
     @property
-    def G3R(self): 
+    def g3r(self): 
         return norm_by_col(
             (self.data['G3R_GREEN']/self.data['G3R_RED']).as_matrix())
      
     @property
-    def G4R(self): 
+    def g4r(self): 
         return norm_by_col(
             (self.data['G4R_GREEN']/self.data['G4R_RED']).as_matrix())
      
     @property
-    def G5R(self): 
+    def g5r(self): 
         return norm_by_col(
             (self.data['G5R_GREEN']/self.data['G5R_RED']).as_matrix())
      
     @property
-    def G2L(self): 
+    def g2l(self): 
         return norm_by_col(
             (self.data['G2L_GREEN']/self.data['G2L_RED']).as_matrix())
      
     @property
-    def G3L(self): 
+    def g3l(self): 
         return norm_by_col(
             (self.data['G3L_GREEN']/self.data['G3L_RED']).as_matrix())
      
     @property
-    def G4L(self): 
+    def g4l(self): 
         return norm_by_col(
             (self.data['G4L_GREEN']/self.data['G4L_RED']).as_matrix())
      
     @property
-    def G5L(self): 
+    def g5l(self): 
         return norm_by_col(
             (self.data['G5L_GREEN']/self.data['G5L_RED']).as_matrix())
 
@@ -206,7 +210,7 @@ def load_gcamp(trial):
     t_gcamp = pd.read_csv(path_t_gcamp, header=None).as_matrix()[0]
     gcamp = pd.read_csv(path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
 
-    if not len(t_gcamp) == len(g_camp):
+    if not len(t_gcamp) == len(gcamp):
         raise Exception('Time vector and GCaMP vector must be equal lengths.')
         
     # convert time vector to relative time
@@ -225,7 +229,7 @@ def load_behav(trial):
     path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.file_behav)
     
     # get start and end frames from light times file
-    start, end = pd.read_excel(path_light, header=None).ax_matrix().flatten()
+    start, end = pd.read_excel(path_light, header=None).as_matrix().flatten()
 
     # load raw behav data
     behav_ = pd.read_csv(path_behav, header=None).as_matrix()
@@ -242,7 +246,7 @@ def load_behav(trial):
     for vbl, col in C.COLS_BEHAV.items():
         cols[col] = C.COLS_FICTRAC[vbl]
         
-    behav = behav_[mask, cols]
+    behav = behav_[mask][:, cols].astype(float)
    
     # convert time vector to relative time
     t_behav -= t_behav[0]
@@ -266,7 +270,7 @@ def load_air(trial, t_behav=None, behav=None):
         
         # build path and load air_tube file
         path_air = os.path.join(L.DATA_ROOT, trial.path, trial.file_air)
-        t_air, air = pd.read_csv(path_air).as_matrix()
+        t_air, air = pd.read_csv(path_air, header=None).as_matrix()
         
         # convert time vector to relative time in seconds
         t_air /= 1000.
@@ -297,7 +301,10 @@ def load_air(trial, t_behav=None, behav=None):
     else:
         raise Exception('Expt "{}" not found in config.'.format(trial.expt))
     
-    return t_air, air
+    # calculate air tube velocity
+    v_air = np.gradient(unwrap(air, *C.LIMS_ANG)) / C.DT_AIR
+    
+    return t_air, np.array([air, v_air]).T
 
 
 def avg_or_interp(t, x, w, cols_ang):
@@ -329,7 +336,7 @@ def avg_or_interp(t, x, w, cols_ang):
         cols_ang = []
     
     # select x for times between t_0 and t_1
-    mask = (t >= t_0) & (t < t_1)
+    mask = (t >= w[0]) & (t < w[1])
     x_mask = x[mask]
     
     # loop over columns of x
@@ -346,27 +353,27 @@ def avg_or_interp(t, x, w, cols_ang):
             
         else:
             # find closest non-nan val before t_0
-            t_before = t[t < t_0]
-            x_before = x[t < t_0, col_ctr]
+            t_before = t[t < w[0]]
+            x_before = x[t < w[0], col_ctr]
             mask_before = ~np.isnan(x_before)
             
             try:
-                t_0_ = t_before[mask_before][-1]
+                t_0 = t_before[mask_before][-1]
                 x_0 = x_before[mask_before][-1]
             except IndexError:
-                t_0_ = np.nan
+                t_0 = np.nan
                 x_0 = np.nan
                 
             # find closest non-nan val after t_1
-            t_after = t[t >= t_1]
-            x_after = x[t >= t_1, col_ctr]
+            t_after = t[t >= w[1]]
+            x_after = x[t >= w[1], col_ctr]
             mask_after = ~np.isnan(x_after)
             
             try:
-                t_1_ = t_after[mask_after][0]
+                t_1 = t_after[mask_after][0]
                 x_1 = x_after[mask_after][0]
             except IndexError:
-                t_1_ = np.nan
+                t_1 = np.nan
                 x_1 = np.nan
                 
             if any(np.isnan([x_0, x_1])):
@@ -376,8 +383,8 @@ def avg_or_interp(t, x, w, cols_ang):
                 if col_ctr in cols_ang:
                     x_0, x_1 = unwrap(np.array([x_0, x_1]), *C.LIMS_ANG)
                     
-                slp = (x_1 - x_0) / (t_1_ - t_0_)  # slope
-                y_ = x_0 + slp * (np.mean(t_0, t_1) - t_0_)
+                slp = (x_1 - x_0) / (t_1 - t_0)  # slope
+                y_ = x_0 + slp * (np.mean(w) - t_0)
                 
         if col_ctr in cols_ang:
             y_ = wrap(np.array([y_]), *C.LIMS_ANG)[0]
@@ -574,6 +581,22 @@ def norm_by_col(data):
     
 
 # other auxiliary functions
+
+def get_trial(name):
+    """
+    Get a trial object by name.
+    """
+    session = make_session()
+    trials = session.query(d_models.Trial).filter_by(name=name)
+    if trials.count() == 0:
+        raise Exception('Trial "{}" not found.'.format(name))
+    elif trials.count() > 1:
+        raise Exception('Trial "{}" found multiple times.'.format(name))
+    else:
+        trial = trials.first()
+        session.close()
+        return trial
+
 
 def split_at_nans(x, min_len, mode='any'):
     """

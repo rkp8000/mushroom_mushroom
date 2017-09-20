@@ -27,6 +27,8 @@ COLS_FICTRAC = {
 
 DT_FICTRAC = 1./60
 
+DT_AIR = 0.00204
+
 PFX_CLEAN = 'clean'
 
 N_COLS_BEHAV = 4
@@ -35,7 +37,7 @@ COLS_BEHAV = {'V_LAT': 0, 'V_FWD': 1, 'V_ANG': 2, 'HEADING': 3}
 
 LIMS_ANG = (-180, 180)
 
-N_COLS_FINAL = 22
+N_COLS_FINAL = 23
 
 COLS_FINAL = [
     ('TIME', 0),
@@ -60,11 +62,12 @@ COLS_FINAL = [
     ('V_ANG', 19),
     ('HEADING', 20),
     ('AIR', 21),
+    ('V_AIR', 22),
 ]
 
 COL_SLICE_GCAMP = slice(1, 17)
 COL_SLICE_BEHAV = slice(17, 21)
-COL_AIR = 21
+COL_SLICE_AIR = slice(21, 23)
 
 # EXPERIMENT FEATURES
 WRAPPED_ANG_VARS = ['heading', 'air_tube']
