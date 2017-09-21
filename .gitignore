@@ -1,4 +1,6 @@
 env
+tables
+data_snapshots
 .idea
 
 .DS_Store
