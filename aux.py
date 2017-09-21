@@ -4,6 +4,19 @@ import numpy as np
 import os
 
 
+def save_table(save_file, df, header=True, index=False):
+    """
+    Save a pandas DataFrame instance to disk.
+    """
+    
+    # make sure save directory exists
+    save_dir = os.path.dirname(save_file)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    df.to_csv(save_file, header=header, index=index)
+
+
 def nansem(x, axis=None):
     """
     Calculate the standard error of the mean ignoring nans.
