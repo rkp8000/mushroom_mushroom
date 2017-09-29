@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from .d_models import Base
-import LOCAL_SETTINGS as L
+import LOCAL as L
 
 
 def make_session():

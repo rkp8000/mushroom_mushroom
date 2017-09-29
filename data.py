@@ -12,7 +12,7 @@ from db import d_models, make_session
 
 import CONFIG as C
 import PARAMS as P
-import LOCAL_SETTINGS as L
+import LOCAL as L
 
 
 class DataLoader(object):

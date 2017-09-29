@@ -15,5 +15,5 @@ data_snapshots
 *.js
 
 sandbox.ipynb
-LOCAL_SETTINGS.py
+LOCAL.py
 
