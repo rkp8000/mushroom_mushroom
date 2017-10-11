@@ -17,3 +17,6 @@ data_snapshots
 sandbox.ipynb
 LOCAL.py
 
+*.m~
+*.mat
+
