@@ -2,106 +2,190 @@
 tic;
 
 %% DEFINE PARAMS
-PULSE = 0.1;  % unit pulse duration (s)
-ONSET = 90;  % start of pulse sequence (s)
-OFFSET = 300;  % end of pulse sequence (s)
-SEED = 0;  % integer RNG seed, which specifies the instantiation
+SAVE_FILE_PREFIX = 'odor_times';
+
+% RNG SEEDS
+SEED_P = 'shuffle';
+SEED_M = 'shuffle';
+
+% PULSE/ITVL SEQUENCE
+FIRST_PULSE = 30;  % time of first pulse (s)
+P_DURS = [1, 5];  % range of pulse duration (s)
+I_DURS = [10, 20];  % range of interpulse interval duration (s)
+P_OFFSET = 230;  % time to stop pulse/interval sequence (s)
+
+% M-SEQUENCE
+M_ONSET = 240;  % start of M-sequence (s) (must be after P_OFFSET)
+M_OFFSET = 300;  % end of M-sequence (s)
+M_UNIT = 0.5;  % unit pulse/no-pulse interval in M-sequence (s)
 
 M = 16;  % M memory elements
-RCSN = [6, 4, 3, 1];  % recursion relatoin according to M (look up from 
+RCSN = [6, 4, 3, 1];  % recursion relation according to M (look up from 
 % http://www.kempacoustics.com/thesis/node83.html#mlsrecurrsion)
 
-TEST = 0;  % set to 1 to plot, instead of present, sequence
-TEST_START = 88;  % start of test plot (s)
-TEST_END = 95;  % end of test plot (s)
+% TEST/VIEWING PARAMS
+TEST = 1;  % set to 1 to plot, instead of present, sequence
+TEST_START = 0;  % start of test plot (s)
+TEST_END = 300;  % end of test plot (s)
 
-% round onset and offset to nearest pulse multiple
-ONSET = round(ONSET/PULSE) * PULSE;
-OFFSET = round(OFFSET/PULSE) * PULSE;
+if P_OFFSET > M_ONSET
+    error('P_OFFSET MUST BE BEFORE M_ONSET');
+end
 
-%% GENERATE M-SEQUENCE
+%% MAKE PULSE/ITVL SEQUENCE
+rng(SEED_P);
 
-rng(SEED);
+max_pulses = ceil((P_OFFSET - FIRST_PULSE) / (P_DURS(1) + I_DURS(1)));
+
+odor_on_times_p = nan(max_pulses, 1);
+odor_off_times_p = nan(max_pulses, 1);
+
+t = FIRST_PULSE;
+ctr = 0;
+
+while t < P_OFFSET
+    
+    ctr = ctr + 1;
+    
+    % pulse
+    odor_on_times_p(ctr) = t;
+    pulse_dur = P_DURS(1) + ((P_DURS(2) - P_DURS(1))*rand());
+    t = t + pulse_dur;
+    odor_off_times_p(ctr) = t;
+    
+    % interval
+    itvl_dur = I_DURS(1) + ((I_DURS(2) - I_DURS(1))*rand());
+    t = t + itvl_dur;
+    
+end
+
+odor_on_times_p = odor_on_times_p(1:ctr, 1);
+odor_off_times_p = odor_off_times_p(1:ctr, 1);
+
+% make sure last pulse does not extend beyond P_OFFSET
+odor_off_times_p(end) = min(odor_off_times_p(end), P_OFFSET);
+
+%% MAKE M-SEQUENCE
+rng(SEED_M);
+
+M_DUR = M_OFFSET - M_ONSET;
+
+% N total time units for M-seq
+N = int64(floor(M_DUR/M_UNIT)) + 1;
+
+% initialize final result vector
+s = zeros(N, 1);
+s(1) = 1;
 
 % generate initial x whose first element is 1 (to ensure consistent
 % first pulse times)
 x = rand(1, M) < 0.5;
 x(1) = 1;
 
-% N total pulses
-N = int64((OFFSET-ONSET)/PULSE) + 1;
-
-% initialize sequence vector
-s = zeros(N, 1);
-s(1) = x(1);
-
-% loop through all pulses
+% loop through all time units
 for ctr = 2:(N-1)
-    % update x using M-sequence recursion relation
+    % update x using M-seq recursion relation
     x_end = mod(sum(x(RCSN)), 2);
     x = [x(2:end), x_end];
     % let first s equal first element of x
     s(ctr) = x(1);
 end
 
-if ONSET >= PULSE
-    % pad s with zeros
-    s = [zeros(int64(ONSET/PULSE), 1); s];
-end
+% extract odor on and off times
+odor_on_times_m = M_ONSET + (M_UNIT * (find(diff([0; s]) == 1) - 1));
+odor_off_times_m = M_ONSET + (M_UNIT * (find(diff([0; s]) == -1) - 1));
 
-pulse_times = double(0:length(s)-1)' * PULSE;
+%% COMBINE INTO FULL SEQUENCES OF ODOR ON/OFF TIMES
 
-disp('Sequence creation completed at t = ');
-disp(toc);
+odor_on_times = [odor_on_times_p; odor_on_times_m];
+odor_off_times = [odor_off_times_p; odor_off_times_m];
+
+%% SAVE ODOR ON AND OFF TIMES TO FILE
+timestamp = datestr(datetime('now'), 'yyyymmdd_HHMMSS');
+save_file = [SAVE_FILE_PREFIX, '_', timestamp, '.mat'];
+save(save_file, 'odor_on_times_p', 'odor_off_times_p', 'odor_on_times_m', 'odor_off_times_m');
 
 %% PRESENT PULSE SEQUENCE
+
 if ~TEST
     %% send to air tube
-
-    for ctr = 1:length(pulse_times)
-        next_pulse_time = pulse_times(ctr);
-
-        % use "pause" if we'll have to wait a while for the next pulse
-        if toc < (next_pulse_time - (0.9*PULSE))
-            pause(0.9*PULSE);
-        end
+    for pulse_ctr = 1:length(odor_on_times)
         
-        % if for some reason we've missed this pulse skip it
-        if toc > next_pulse_time
-            if ctr == 1
-                s(ctr) = 0;
-            else
-                s(ctr) = s(ctr-1);
-            end
-        end
+        % get on and off times of next pulse
+        odor_on_time = odor_on_times(pulse_ctr);
+        odor_off_time = odor_off_times(pulse_ctr);
         
-        % hold till next pulse time
-        while toc < next_pulse_time
+        t = toc;
+        
+        if odor_off_time <= t
+            % continue if we've completely missed this pulse
             continue
+        elseif odor_on_time <= t
+            % turn odor on if we've missed the start of the pulse
+            disp('ON'); disp(toc);
+            
+            % pause up to 0.05 seconds before pulse end
+            till_odor_off = odor_off_time - toc;
+            
+            if till_odor_off > 0.05
+                pause(till_odor_off - 0.05);
+            end
+            
+            % wait till correct moment to turn odor off
+            while toc < odor_off_time
+                continue
+            end
+            
+            % turn odor off
+            disp('OFF'); disp(toc);
+            
+        else
+            % pause up to 0.05 seconds before pulse start
+            till_odor_on = odor_on_time - toc;
+            
+            if till_odor_on > 0.05
+                pause(till_odor_on - 0.05);
+            end
+            
+            % wait till correct moment to turn odor on
+            while toc < odor_on_time
+                continue
+            end
+            
+            % turn odor on
+            disp('ON'); disp(toc);
+            
+            % pause up to 0.05 seconds before pulse end
+            till_odor_off = odor_off_time - toc;
+            
+            if till_odor_off > 0.05
+                pause(till_odor_off - 0.05);
+            end
+            
+            % wait till correct moment to turn odor off
+            while toc < odor_off_time
+                continue
+            end
+            
+            % turn odor off
+            disp('OFF'); disp(toc);
+            
         end
-
-        % send signal
-        if s(ctr) == 0
-            % send odor off signal
-            disp('OFF');
-        elseif s(ctr) == 1
-            % send odor on signal
-            disp('ON');
-        end
-
     end
 else
     %% send to plot
+    % make time vector
+    temp_t = [odor_on_times, odor_off_times]';
+    temp_t = [temp_t(:), temp_t(:)]';
+    ts = [0; temp_t(:); M_OFFSET];
     
-    % make time vector to display
-    t = [pulse_times'; [pulse_times(2:end); OFFSET+PULSE]'];
-    t_ = t(:);
+    % make odor vector
+    temp_o = repmat([0, 1, 1, 0]', 1, length(odor_on_times));
+    os = [0; temp_o(:); 0];
     
-    % make odor vector to display
-    s_ = [s'; s'];
-    s_ = s_(:);
+    % display plot
     
-    plot(t_, s_);
+    plot(ts, os);
     xlim([TEST_START, TEST_END]);
     xlabel('time (s)');
     ylabel('odor state');
