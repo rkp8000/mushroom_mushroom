@@ -80,7 +80,8 @@ class DataLoader(object):
                     t_air, air, w, cols_ang=[0])
                 
             # calc v_air from downsampled air if driven expt
-            if trial.expt in [C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
+            if trial.expt in [
+                    C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
                 data_[:, dict(C.COLS_FINAL)['V_AIR']] \
                     = np.gradient(data_[:, dict(C.COLS_FINAL)['AIR']]) / np.gradient(t)
             
