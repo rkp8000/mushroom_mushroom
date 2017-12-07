@@ -2,19 +2,56 @@
 PI = 3.14159265359
 DT = 0.1
 
-EXPTS = {
-    'DRIVEN_SINUSOIDAL': 'driven_sinusoidal',
-    'DRIVEN_RANDOM': 'driven_random',
-    'CLOSED_LOOP': 'closed_loop',
-    'NO_AIR': 'no_air',
+EXPTS = [
+    'asensory_5_hz',
+    'asensory_10_hz',
+    'closed',
+    'sinusoidal',
+    'closed_white',
+    'no_air_motion',
+    'closed_odor_fluct',
+    'white_odor_fluct',
+]
+
+EXPTS_ASENSORY = [
+    'asensory_5_hz',
+    'asensory_10_hz',
+]
+
+EXPTS_SENSORY = [
+    'closed',
+    'sinusoidal',
+    'closed_white',
+    'no_air_motion',
+    'closed_odor_fluct',
+    'white_odor_fluct',
+]
+
+EXPTS_W_AIR = [
+    'sinusoidal',
+    'closed_white',
+    'closed_odor_fluct',
+    'white_odor_fluct',
+]
+
+EXPTS_ODOR_FLUCT = [
+    'closed_odor_fluct',
+    'white_odor_fluct',
+]
+
+FILE_ENDINGS_ASENSORY = {
+    'BEHAV': '.dat',
+    'GCAMP': 'GCaMP_Signal.csv',
 }
 
-FILE_ENDINGS = {
+FILE_ENDINGS_SENSORY = {
     'BEHAV': '.dat',
     'T_GCAMP': 'GCaMP_Time_Pre.csv',
     'LIGHT': 'Light_Times.xlsx',
     'GCAMP': 'ROI-profiles.txt',
     'AIR': 'Air_Tube_Motion.csv',
+    'ODOR_BINARY': 'Olfactometer.csv',
+    'ODOR_PID': 'PID.csv',
 }
 
 COLS_FICTRAC = {
@@ -23,11 +60,12 @@ COLS_FICTRAC = {
     'V_FWD': 6,
     'V_ANG': 7,
     'HEADING': 16,
+    'TIMESTAMP': 21,
 }
 
 DT_FICTRAC = 1./60
 
-DT_AIR = 0.00204
+# DT_AIR = 0.00204
 
 PFX_CLEAN = 'clean'
 
@@ -36,8 +74,6 @@ N_COLS_BEHAV = 4
 COLS_BEHAV = {'V_LAT': 0, 'V_FWD': 1, 'V_ANG': 2, 'HEADING': 3}
 
 LIMS_ANG = (-180, 180)
-
-N_COLS_FINAL = 23
 
 COLS_FINAL = [
     ('TIME', 0),
@@ -62,12 +98,17 @@ COLS_FINAL = [
     ('V_ANG', 19),
     ('HEADING', 20),
     ('AIR', 21),
-    ('V_AIR', 22),
+    ('W_AIR', 22),
+    ('ODOR_BINARY', 23),
+    ('ODOR_PID', 24),
 ]
+
+N_COLS_FINAL = len(COLS_FINAL)
 
 COL_SLICE_GCAMP = slice(1, 17)
 COL_SLICE_BEHAV = slice(17, 21)
 COL_SLICE_AIR = slice(21, 23)
+COL_SLICE_ODOR = slice(23, 25)
 
 # EXPERIMENT FEATURES
 WRAPPED_ANG_VARS = ['heading', 'air_tube']
@@ -75,7 +116,8 @@ ODOR_START = 90  # s
 ODOR_END = 150  # s
 AIR_FLOW_MAX_ANGLE = 90  # deg
 AIR_FLOW_OFF_ANGLE = 180 * 2.67 / PI
-MAX_TRIAL_TIME = 300
+
+T_MAX = 300
 
 DRIVEN_RANDOM_EPOCHS = [(60, 120), (180, 240)]
 

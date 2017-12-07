@@ -49,26 +49,39 @@ class DataLoader(object):
             t_gcamp, gcamp = load_gcamp(trial)
             t_behav, behav = load_behav(trial)
             t_air, air = load_air(trial, t_behav, behav)
+            t_odor, odor = load_odor(trial)
             
-            if not (t_gcamp[0] == t_behav[0] == t_air[0] == 0):
-                raise Exception('Relative time vectors generated incorrectly.')
+            first_ts = np.array([
+                t_gcamp[0], t_behav[0], t_air[0], t_odor_binary[0], t_odor_pid[0]
+            ])
+            
+            if not np.all(first_ts == 0):
+                raise Exception('Problem generating relative time vectors.')
             
             # truncate any data with time vector longer than max trial time
-            gcamp = gcamp[t_gcamp < C.MAX_TRIAL_TIME]
-            behav = behav[t_behav < C.MAX_TRIAL_TIME]
-            air = air[t_air < C.MAX_TRIAL_TIME]
+            t_mask_gcamp = t_gcamp < C.T_MAX
+            t_mask_behav = t_behav < C.T_MAX
+            t_mask_air = t_air < C.T_MAX
+            t_mask_odor = t_odor < C.T_MAX
             
-            t_gcamp = t_gcamp[t_gcamp < C.MAX_TRIAL_TIME]
-            t_behav = t_behav[t_behav < C.MAX_TRIAL_TIME]
-            t_air = t_air[t_air < C.MAX_TRIAL_TIME]
-            
+            t_gcamp = t_gcamp[t_mask_gcamp]
+            t_behav = t_behav[t_mask_behav]
+            t_air = t_air[t_mask_air]
+            t_odor = t_odor[t_mask_odor]
+             
+            gcamp = gcamp[t_mask_gcamp]
+            behav = behav[t_mask_behav]
+            air = air[t_mask_air]
+            odor = odor[t_mask_odor]
+           
             # initialize final data structure
-            t = np.arange(0, C.MAX_TRIAL_TIME, C.DT)
+            t = np.arange(0, C.T_MAX, C.DT)
             data_ = np.nan * np.zeros((len(t), C.N_COLS_FINAL))
             data_[:, 0] = t
 
-            # loop over all timepoints one-by-one, filling in their corresponding
-            # values by averaging/interpolating the raw data
+            # downsample data
+            ## loop over all timepoints one-by-one, filling in their corresponding
+            ## values by averaging/interpolating the raw data
             for t_ctr, t_ in enumerate(t):
                 w = (t_ - C.DT/2, t_ + C.DT/2)
                 
@@ -78,13 +91,16 @@ class DataLoader(object):
                     t_behav, behav, w, cols_ang=[C.COLS_BEHAV['HEADING']])
                 data_[t_ctr, C.COL_SLICE_AIR] = avg_or_interp(
                     t_air, air, w, cols_ang=[0])
+                data_[t_ctr, C.COL_SLICE_ODOR] = avg_or_interp(
+                    t_odor, odor, w, cols_ang=None)
                 
-            # calc v_air from downsampled air if driven expt
-            if trial.expt in [
-                    C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
-                data_[:, dict(C.COLS_FINAL)['V_AIR']] \
-                    = np.gradient(data_[:, dict(C.COLS_FINAL)['AIR']]) / np.gradient(t)
-            
+            # calc w_air from downsampled air if air recorded separately
+            if trial.expt in C.EXPTS_W_AIR:
+                
+                col_air = dict(C.COLS_FINAL)['W_AIR']
+                w_air = np.gradient(data_[:, col_air]) / np.gradient(t)
+                data_[:, col_air] = w_air
+                
             # convert to data frame
             data = pd.DataFrame()
             
@@ -147,7 +163,13 @@ class DataLoader(object):
     def air(self): return self.data['AIR'].as_matrix()
     
     @property
-    def v_air(self): return self.data['V_AIR'].as_matrix()
+    def w_air(self): return self.data['W_AIR'].as_matrix()
+    
+    @property
+    def odor_binary(self): return self.data['ODOR_BINARY'].as_matrix()
+    
+    @property
+    def odor_pid(self): return self.data['ODOR_PID'].as_matrix()
     
     @property
     def speed(self): return np.sqrt(self.v_lat**2 + self.v_fwd**2)
@@ -236,21 +258,43 @@ class DataLoader(object):
 def load_gcamp(trial):
     """
     Load and return the gcamp time vector, in seconds and starting from 0,
-    and the gcamp fluorescence matrix.
+    and the gcamp fluorescence matrix. The returned gcamp fluorescence matrix
+    has one row per timepoint and 16 columns. The first eight are red channels
+    (G2R, G3R, G4R, G5R, G2L, G3L, G4L, G5L) and the second eight are green
+    channels (G2R, G3R, G4R, G5R, G2L, G3L, G4L, G5L).
     """
-    # build paths
-    path_t_gcamp = os.path.join(
-        L.DATA_ROOT, trial.path, trial.file_t_gcamp)
-    path_gcamp = os.path.join(
-        L.DATA_ROOT, trial.path, trial.file_gcamp)
-    
-    # load data
-    t_gcamp = pd.read_csv(path_t_gcamp, header=None).as_matrix()[0]
-    gcamp = pd.read_csv(path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
-
-    if not len(t_gcamp) == len(gcamp):
-        raise Exception('Time vector and GCaMP vector must be equal lengths.')
+    if trial.expt in C.EXPTS_ASENSORY:
         
+        # build path
+        path_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.f_gcamp)
+        
+        # load data
+        gcamp_ = pd.read_csv(path_gcamp, header=None).as_matrix().astype(float).T
+        
+        # get timestamp (first row)
+        t_gcamp = gcamp_[:, 0]
+        
+        # make full (16-col) gcamp matrix
+        gcamp = np.nan * np.zeros((len(t_gcamp), 16))
+        
+        # fill in G2-G5R red and G2-G5R green
+        gcamp[:, :4] = gcamp_[:, 1:5]
+        gcamp[:, 9:13] = gcamp_[:, 5:9]
+        
+    elif trial.expt in C.EXPTS_SENSORY:
+        
+        # build paths
+        path_t_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.f_t_gcamp)
+        path_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.f_gcamp)
+
+        # load data
+        t_gcamp = pd.read_csv(path_t_gcamp, header=None).as_matrix()[0]
+        gcamp = pd.read_csv(
+            path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
+
+        if not len(t_gcamp) == len(gcamp):
+            raise Exception('Time vector and GCaMP vector must be equal lengths.')
+
     # convert time vector to relative time
     t_gcamp -= t_gcamp[0]
 
@@ -262,37 +306,57 @@ def load_behav(trial):
     Load and return behavioral time vector, in seconds and starting from 0,
     and behavioral data matrix including three velocity components and heading.
     """
-    # build paths
-    path_light = os.path.join(L.DATA_ROOT, trial.path, trial.file_light)
-    path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.file_behav)
-    
-    # get start and end frames from light times file
-    start, end = pd.read_excel(path_light, header=None).as_matrix().flatten()
-
-    # load raw behav data
-    behav_ = pd.read_csv(path_behav, header=None).as_matrix()
-
-    # create mask selecting frames between two light times
-    frame_ctrs = behav_[:, C.COLS_FICTRAC['FRAME_CTR']]
-    mask = (start <= frame_ctrs) & (frame_ctrs < end)
-    
-    # get time vector and behav data selected by mask
-    t_behav = frame_ctrs[mask] * C.DT_FICTRAC
-    
-    # order columns for final behav matrix
-    cols = [None for _ in range(C.N_COLS_BEHAV)]
-    for vbl, col in C.COLS_BEHAV.items():
-        cols[col] = C.COLS_FICTRAC[vbl]
+    if trial.expt in C.EXPTS_ASENSORY:
         
-    behav = behav_[mask][:, cols].astype(float)
-   
+        # build path
+        path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.f_behav)
+        
+        # load data
+        behav_ = pd.read_csv(path_behav, header=None).as_matrix()
+        
+        # extract timestamp
+        t_behav = behav_[:, COLS_FICTRAC['TIMESTAMP']]
+        
+        # order columns for final behav matrix
+        cols = [None for _ in range(C.N_COLS_BEHAV)]
+        for vbl, col in C.COLS_BEHAV.items():
+            cols[col] = C.COLS_FICTRAC[vbl]
+
+        behav = behav_[:, cols].astype(float)
+        
+    elif trial.expt in C.EXPTS_SENSORY:
+        
+        # build paths
+        path_light = os.path.join(L.DATA_ROOT, trial.path, trial.f_light)
+        path_behav = os.path.join(L.DATA_ROOT, trial.path, trial.f_behav)
+
+        # get start and end frames from light times file
+        start, end = pd.read_excel(path_light, header=None).as_matrix().flatten()
+
+        # load raw behav data
+        behav_ = pd.read_csv(path_behav, header=None).as_matrix()
+
+        # create mask selecting frames between two light times
+        frame_ctrs = behav_[:, C.COLS_FICTRAC['FRAME_CTR']]
+        mask = (start <= frame_ctrs) & (frame_ctrs < end)
+
+        # get time vector and behav data selected by mask
+        t_behav = frame_ctrs[mask] * C.DT_FICTRAC
+
+        # order columns for final behav matrix
+        cols = [None for _ in range(C.N_COLS_BEHAV)]
+        for vbl, col in C.COLS_BEHAV.items():
+            cols[col] = C.COLS_FICTRAC[vbl]
+
+        behav = behav_[mask][:, cols].astype(float)
+
     # convert time vector to relative time
     t_behav -= t_behav[0]
-    
+
     # correct heading so 0 is uw and angles are in deg
     behav[:, C.COLS_BEHAV['HEADING']] -= np.pi
     behav[:, C.COLS_BEHAV['HEADING']] *= (180/np.pi)
-    
+
     return t_behav, behav
 
 
@@ -301,16 +365,16 @@ def load_air(trial, t_behav=None, behav=None):
     Load air tube time vector, in seconds and starting at 0,
     and corresponding air tube angle data.
     
-    If trial is closed loop trial, t_behav and behav must be provided.
-    If trial is no-air trial, t_behav must be provided.
+    If trial.expt is 'closed', t_behav and behav must be provided.
+    If trial.expt is 'no_air_motion', t_behav must be provided.
     """
-    if trial.expt in [C.EXPTS['DRIVEN_SINUSOIDAL'], C.EXPTS['DRIVEN_RANDOM']]:
+    if trial.expt in C.EXPTS_W_AIR:
         
         # build path and load air_tube file
-        path_air = os.path.join(L.DATA_ROOT, trial.path, trial.file_air)
+        path_air = os.path.join(L.DATA_ROOT, trial.path, trial.f_air)
         t_air, air = pd.read_csv(path_air, header=None).as_matrix()
         
-        # convert time vector to in seconds and add 0 s initial time
+        # convert time vector to seconds and add 0 s initial time
         # with corresponding NaN value for air
         t_air /= 1000.
         t_air = np.concatenate([[0], t_air])
@@ -321,35 +385,88 @@ def load_air(trial, t_behav=None, behav=None):
         air *= (180/np.pi)
         
         # don't calc air tube vel. until we've downsampled it
-        v_air = np.nan * np.ones(len(t_air))
+        w_air = np.nan * np.ones(len(t_air))
         
-    elif trial.expt == C.EXPTS['CLOSED_LOOP']:
+    elif trial.expt in ['closed']:
         
         # make air tube signal equal to behavioral heading signal
         if (t_behav is None) or (behav is None):
-            raise Exception('Both "t_behav" and "behav" must be provided for closed loop trials.')
+            raise Exception(
+                '"t_behav" and "behav" must be provided for closed loop trials.')
         
         t_air = t_behav
         air = behav[:, C.COLS_BEHAV['HEADING']]
         
         # calc air tube vel
-        v_air = np.gradient(unwrap(air, *C.LIMS_ANG)) / np.gradient(t_behav)
+        w_air = np.gradient(unwrap(air, *C.LIMS_ANG)) / np.gradient(t_behav)
         
-    elif trial.expt == C.EXPTS['NO_AIR']:
+    elif trial.expt in (['no_air_motion'] + C.EXPTS_ASENSORY):
         
         # make air tube signal all NaNs
         if t_behav is None:
-            raise Exception('"t_behav" must be provided for no_air trials.')
+            raise Exception('"t_behav" must be provided for no_air_motion trials.')
         
-        t_air = t_behav
+        t_air = t_behav.copy()
         air = np.nan * np.ones(len(t_behav))
-        v_air = np.nan * np.ones(len(t_behav))
+        w_air = np.nan * np.ones(len(t_behav))
         
     else:
         raise Exception('Expt "{}" not found in config.'.format(trial.expt))
     
-    return t_air, np.array([air, v_air]).T
+    return t_air, np.array([air, w_air]).T
 
+
+def load_odor(trial, t_behav=None):
+    """
+    Load odor time vector (in s, starting at 0), ttl reading, and pid reading.
+    """
+    if trial.expt in C.EXPTS_ODOR_FLUCT:
+        
+        # build paths and load odor files
+        path_odor_binary = os.path.join(
+            L.DATA_ROOT, trial.path, trial.f_odor_binary)
+        t_odor_binary, odor_binary = pd.read_csv(
+            path_odor_binary, header=None).as_matrix()
+        
+        path_odor_pid = os.path.join(
+            L.DATA_ROOT, trial.path, trial.f_odor_pid)
+        t_odor_pid, odor_pid = pd.read_csv(
+            path_odor_pid, header=None).as_matrix()
+        
+        # make sure binary and pid have same timestamps
+        np.testing.assert_array_almost_equal(t_odor_binary, t_odor_pid)
+        t_odor = t_odor_binary
+        
+        # convert time vector to seconds and add initial 0 value
+        t_odor /= 1000.
+        
+        t_odor = np.concatenate([[0], t_odor])
+        
+        odor_binary = np.concatenate([[np.nan], odor_binary])
+        odor_pid = np.concatenate([[np.nan], odor_pid])
+        
+        # binarize odor_binary
+        mask_low = odor_binary < C.ODOR_BINARY_CUTOFF
+        mask_high = odor_binary >= C.ODOR_BINARY_CUTOFF
+        
+        odor_binary[mask_low] = 0
+        odor_binary[mask_high] = 1
+        
+    else:
+        
+        # make odor binary signal = 1 between 90 & 150 s
+        if t_behav is None:
+            raise Exception('"t_behav" must be provided if no odor files.')
+            
+        t_odor = t_behav.copy()
+        
+        odor_binary = np.zeros(len(t_behav))
+        odor_binary[(C.ODOR_START <= t_behav) & (t_behav < C.ODOR_END)] = 1
+        
+        odor_pid = np.nan * np.ones(len(t_behav))
+        
+    return t_odor, np.array([odor_binary, odor_pid]).T
+        
 
 def avg_or_interp(t, x, w, cols_ang):
     """
@@ -381,7 +498,7 @@ def avg_or_interp(t, x, w, cols_ang):
     
     # select x for times between t_0 and t_1
     mask = (t >= w[0]) & (t < w[1])
-    x_mask = x[mask]
+    x_mask = x[mask, :]
     
     # loop over columns of x
     y = np.nan * np.ones(x.shape[1])
@@ -421,6 +538,7 @@ def avg_or_interp(t, x, w, cols_ang):
                 x_1 = np.nan
                 
             if any(np.isnan([x_0, x_1])):
+                # if there were not two non-nan values around x at t
                 y_ = np.nan
             else:
                 # linearly interpolate between x_0 and x_1
