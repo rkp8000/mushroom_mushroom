@@ -21,11 +21,13 @@ class Trial(Base):
 
     path = Column(String)
 
-    file_behav = Column(String)
-    file_gcamp = Column(String)
-    file_t_gcamp = Column(String)
-    file_light = Column(String)
-    file_air = Column(String)
+    f_behav = Column(String)
+    f_gcamp = Column(String)
+    f_t_gcamp = Column(String)
+    f_light = Column(String)
+    f_air = Column(String)
+    f_odor_binary = Column(String)
+    f_odor_pid = Column(String)
     
     pfx_clean = Column(String)
     
