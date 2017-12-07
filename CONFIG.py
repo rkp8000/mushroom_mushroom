@@ -114,6 +114,7 @@ COL_SLICE_ODOR = slice(23, 25)
 WRAPPED_ANG_VARS = ['heading', 'air_tube']
 ODOR_START = 90  # s
 ODOR_END = 150  # s
+ODOR_BINARY_CUTOFF = 2.5  # V
 AIR_FLOW_MAX_ANGLE = 90  # deg
 AIR_FLOW_OFF_ANGLE = 180 * 2.67 / PI
 

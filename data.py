@@ -25,7 +25,11 @@ class DataLoader(object):
         if no save file exists with this suffix a new one will be created
     :return: DataLoader object for quick data access and transforming
     """
-    def __init__(self, trial, sfx, vel_filt):
+    def __init__(self, trial, sfx, vel_filt, verbose=False):
+        
+        def alert(msg):
+            if verbose:
+                print(msg)
         
         if vel_filt is not None:
             raise NotImplementedError('Velocity filtering not implemented yet.')
@@ -35,12 +39,13 @@ class DataLoader(object):
         
         if os.path.exists(path_clean):
             # check for clean data file and load it if found
-            print(
+            alert(
                 'Loading clean data from file "{}"...'.format(
                 os.path.basename(path_clean)))
             data = pd.read_csv(path_clean)
+            alert('Loaded.')
         else:
-            print(
+            alert(
                 'Loading and cleaning data from directory "{}"...'.format(
                 os.path.dirname(path_clean)))
                 
@@ -49,11 +54,9 @@ class DataLoader(object):
             t_gcamp, gcamp = load_gcamp(trial)
             t_behav, behav = load_behav(trial)
             t_air, air = load_air(trial, t_behav, behav)
-            t_odor, odor = load_odor(trial)
+            t_odor, odor = load_odor(trial, t_behav)
             
-            first_ts = np.array([
-                t_gcamp[0], t_behav[0], t_air[0], t_odor_binary[0], t_odor_pid[0]
-            ])
+            first_ts = np.array([t_gcamp[0], t_behav[0], t_air[0], t_odor[0]])
             
             if not np.all(first_ts == 0):
                 raise Exception('Problem generating relative time vectors.')
@@ -107,10 +110,12 @@ class DataLoader(object):
             for vbl, col in C.COLS_FINAL:
                 data[vbl] = data_[:, col]
             
-            print('Data loaded.')
+            alert('Data loaded.')
             
             # save clean file for easy access next time
             data.to_csv(path_clean, index=False)
+            
+            alert('Cleaned data saved at "{}".'.format(path_clean))
         
         # bind data frame to data loader object
         self.data = data
@@ -279,7 +284,7 @@ def load_gcamp(trial):
         
         # fill in G2-G5R red and G2-G5R green
         gcamp[:, :4] = gcamp_[:, 1:5]
-        gcamp[:, 9:13] = gcamp_[:, 5:9]
+        gcamp[:, 8:12] = gcamp_[:, 5:9]
         
     elif trial.expt in C.EXPTS_SENSORY:
         
@@ -315,7 +320,7 @@ def load_behav(trial):
         behav_ = pd.read_csv(path_behav, header=None).as_matrix()
         
         # extract timestamp
-        t_behav = behav_[:, COLS_FICTRAC['TIMESTAMP']]
+        t_behav = behav_[:, C.COLS_FICTRAC['TIMESTAMP']]
         
         # order columns for final behav matrix
         cols = [None for _ in range(C.N_COLS_BEHAV)]
@@ -383,6 +388,10 @@ def load_air(trial, t_behav=None, behav=None):
         # correct air tube so 0 is in front of fly and angles are in deg
         air -= np.pi/2
         air *= (180/np.pi)
+        
+        # correct air measurement if improperly scaled
+        if np.max(np.abs(air)) >= 180:
+            air *= (180/np.max(np.abs(air)))
         
         # don't calc air tube vel. until we've downsampled it
         w_air = np.nan * np.ones(len(t_air))
