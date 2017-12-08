@@ -100,9 +100,12 @@ class DataLoader(object):
             # calc w_air from downsampled air if air recorded separately
             if trial.expt in C.EXPTS_W_AIR:
                 
-                col_air = dict(C.COLS_FINAL)['W_AIR']
+                col_air = dict(C.COLS_FINAL)['AIR']
+                col_w_air = dict(C.COLS_FINAL)['W_AIR']
+                
                 w_air = np.gradient(data_[:, col_air]) / np.gradient(t)
-                data_[:, col_air] = w_air
+                
+                data_[:, col_w_air] = w_air
                 
             # convert to data frame
             data = pd.DataFrame()
@@ -276,8 +279,8 @@ def load_gcamp(trial):
         # load data
         gcamp_ = pd.read_csv(path_gcamp, header=None).as_matrix().astype(float).T
         
-        # get timestamp (first row)
-        t_gcamp = gcamp_[:, 0]
+        # get timestamp (first col)
+        t_gcamp = gcamp_[:, 0] - gcamp_[0, 0]
         
         # make full (16-col) gcamp matrix
         gcamp = np.nan * np.zeros((len(t_gcamp), 16))
@@ -320,7 +323,7 @@ def load_behav(trial):
         behav_ = pd.read_csv(path_behav, header=None).as_matrix()
         
         # extract timestamp
-        t_behav = behav_[:, C.COLS_FICTRAC['TIMESTAMP']]
+        t_behav = behav_[:, C.COLS_FICTRAC['TIMESTAMP']] / 1000
         
         # order columns for final behav matrix
         cols = [None for _ in range(C.N_COLS_BEHAV)]
@@ -388,10 +391,6 @@ def load_air(trial, t_behav=None, behav=None):
         # correct air tube so 0 is in front of fly and angles are in deg
         air -= np.pi/2
         air *= (180/np.pi)
-        
-        # correct air measurement if improperly scaled
-        if np.max(np.abs(air)) >= 180:
-            air *= (180/np.max(np.abs(air)))
         
         # don't calc air tube vel. until we've downsampled it
         w_air = np.nan * np.ones(len(t_air))
