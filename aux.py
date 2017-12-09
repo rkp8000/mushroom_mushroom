@@ -17,6 +17,23 @@ def save_table(save_file, df, header=True, index=False):
     df.to_csv(save_file, header=header, index=index)
 
 
+def find_segs(x):
+    """
+    Return a list of index pairs corresponding to groups of data where x is True.
+    :param x: 1D array
+    :return: list of index pairs
+    """
+    assert x.dtype == bool
+
+    # find the indices of starts and ends
+    diff = np.diff(np.concatenate([[0], x, [0]]))
+
+    starts = (diff == 1).nonzero()[0]
+    ends = (diff == -1).nonzero()[0]
+
+    return np.array([starts, ends]).T
+
+
 def nansem(x, axis=None):
     """
     Calculate the standard error of the mean ignoring nans.
@@ -52,7 +69,8 @@ def make_extended_predictor_matrix(vs, windows, order):
         
     n = len(list(vs.values())[0])
     if not np.all([v.ndim == 1 and len(v) == n for v in vs.values()]):
-        raise ValueError('All values in "vs" must be 1-D arrays of the same length.')
+        raise ValueError(
+            'All values in "vs" must be 1-D arrays of the same length.')
         
     # make extended predictor array
     vs_extd = []

@@ -8,6 +8,7 @@ import re
 from scipy import signal
 from scipy import stats
 
+from aux import find_segs
 from db import d_models, make_session
 
 import CONFIG as C
@@ -185,9 +186,6 @@ class DataLoader(object):
     @property
     def ball(self): return np.sqrt(self.v_lat**2 + self.v_fwd**2 + self.v_ang**2)
     
-    @property
-    def state(self): return get_states(self.speed, self.walking_threshold)
-     
     @property
     def g2r(self): 
         return norm_by_col(
@@ -664,23 +662,6 @@ def get_states(speed, threshold):
     labels[segs_to_bool(segs_walk, len(speed))] = 'W'
     
     return labels
-
-
-def find_segs(x):
-    """
-    Return a list of index pairs corresponding to groups of data where x is True.
-    :param x: 1D array
-    :return: list of index pairs
-    """
-    assert x.dtype == bool
-
-    # find the indices of starts and ends
-    diff = np.diff(np.concatenate([[0], x, [0]]))
-
-    starts = (diff == 1).nonzero()[0]
-    ends = (diff == -1).nonzero()[0]
-
-    return np.array([starts, ends]).T
 
 
 def get_seg_complement(segs, end):
