@@ -457,8 +457,8 @@ def load_odor(trial, t_behav=None):
         
         odor_binary[mask_low] = 0
         odor_binary[mask_high] = 1
-        
-    else:
+       
+    elif trial.expt in C.EXPTS_SENSORY:
         
         # make odor binary signal = 1 between 90 & 150 s
         if t_behav is None:
@@ -469,6 +469,12 @@ def load_odor(trial, t_behav=None):
         odor_binary = np.zeros(len(t_behav))
         odor_binary[(C.ODOR_START <= t_behav) & (t_behav < C.ODOR_END)] = 1
         
+        odor_pid = np.nan * np.ones(len(t_behav))
+         
+    else:
+        
+        t_odor = t_behav.copy()
+        odor_binary = np.zeros(len(t_behav))
         odor_pid = np.nan * np.ones(len(t_behav))
         
     return t_odor, np.array([odor_binary, odor_pid]).T
