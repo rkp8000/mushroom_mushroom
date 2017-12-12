@@ -175,7 +175,8 @@ class DataLoader(object):
     def w_air(self): return self.data['W_AIR'].as_matrix()
     
     @property
-    def odor_binary(self): return self.data['ODOR_BINARY'].as_matrix()
+    def odor_binary(self):
+        return self.data['ODOR_BINARY'].as_matrix()
     
     @property
     def odor_pid(self): return self.data['ODOR_PID'].as_matrix()
@@ -735,6 +736,28 @@ def norm_by_col(data):
             data_normed[:, ctr] = col_zeroed / np.nanstd(col_zeroed)
 
     return data_normed
+
+
+def random_chunk_split(t, frac, dur):
+    
+    assert t[0] == 0
+    
+    n_chunks = int(np.ceil(t[-1] / dur))
+    starts = np.arange(n_chunks) * dur
+    
+    n_train = int(round(frac * n_chunks))
+    idxs_train = np.random.permutation(n_chunks)[:n_train]
+    
+    train = np.zeros(t.shape, dtype=bool)
+    
+    for idx in idxs_train:
+        
+        start = idx * dur
+        end = start + dur
+        
+        train[(start <= t) & (t < end)] = True
+        
+    return train, ~train
     
 
 # other auxiliary functions
