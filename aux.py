@@ -4,6 +4,19 @@ import numpy as np
 import os
 
 
+class Generic(object):
+    """Class for generic object."""
+    
+    def __init__(self, **kwargs):
+        
+        for k, v in kwargs.items():
+            self.__dict__[k] = v
+            
+    def __setattr__(self, k, v):
+        
+        raise Exception('Attributes may only be set at instantiation.')
+        
+        
 def save_table(save_file, df, header=True, index=False):
     """
     Save a pandas DataFrame instance to disk.
@@ -99,3 +112,19 @@ def make_extended_predictor_matrix(vs, windows, order):
 
     # return full predictor matrix
     return np.concatenate(vs_extd, axis=1)
+
+
+def calc_r2(y, y_hat):
+    """
+    Calculate an R^2 value between a true value
+    and a prediction.
+    """
+    valid = (~np.isnan(y)) & (~np.isnan(y_hat))
+    
+    if valid.sum() == 0:
+        return np.nan
+    else:
+        u = np.nansum((y[valid] - y_hat[valid]) ** 2)
+        v = np.nansum((y[valid] - y_hat[valid].mean()) ** 2)
+        
+        return 1 - (u/v)
