@@ -122,61 +122,65 @@ T_MAX = 300
 
 DRIVEN_RANDOM_EPOCHS = [(60, 120), (180, 240)]
 
-# LOADING PARAMETERS
-# VELOCITY_FILTER_DEFAULT = {'AMP': 2, 'TAU': 0.8, 'T_MAX_FILT': 8}
-
-DAN_ORDER = ['G2L', 'G3L', 'G4L', 'G5L', 'G2R', 'G3R', 'G4R', 'G5R']
-
-COLORS = {
-    'speed': (0, 0, 0),  # black
-    'int_speed': (0, 0, 0),  # black
-    'v_forward': (153/255, 0, 76/255),  # dark pink
-    'int_v_forward': (153/255, 0, 76/255),  # dark pink
-    'v_angular': (76/255, 0, 153/255),  # dark purple
-    'wnm_v_angular': (76/255, 0, 153/255),  # dark purple
-    'int_v_angular': (76/255, 0, 153/255),  # dark purple
-    'heading': (102/255, 102/255, 0),  # dark yellow
-    'ddt_heading': (102/255, 102/255, 0),  # dark yellow
-    'air_tube': (204/255, 0, 102/255),  # dark pink
-    'ddt_air_tube': (204/255, 0, 102/255),  # dark pink
-
-    'G2L': (153/255, 0, 0),  # dark red
-    'G2R': (1, 0, 0),  # red
-    'G2S': (1, 102/255, 102/255),  # pasty red
-    'G2D': (1, 180,255, 180/255),  # pastier red
-
-    'G3L': (0, 0, 153/255),  # dark blue
-    'G3R': (0, 0, 1),  # blue
-    'G3S': (102/255, 102/255, 1),  # pasty blue
-    'G3D': (180/255, 180/255, 1),  # pastier blue
-
-    'G4L': (0, 102/255, 0),  # dark green
-    'G4R': (0, 180/255, 0),  # green
-    'G4S': (51/255, 1, 51/255),  # pasty green
-    'G4D': (0, 180/255, 0),  # green
-
-    'G5L': (153/255, 76/255, 0),  # dark orange
-    'G5R': (1, 128/255, 0),  # orange
-    'G5S': (1, 178/255, 102/255),  # pasty orange
-    'G5D': (1, 204/255, 153/255),  # pastier orange
-
-    'ddt_G2L': (153/255, 0, 0),  # dark red
-    'ddt_G2R': (1, 0, 0),  # red
-    'ddt_G2S': (1, 102/255, 102/255),  # pasty red
-    'ddt_G2D': (1, 180,255, 180/255),  # pastier red
-
-    'ddt_G3L': (0, 0, 153/255),  # dark blue
-    'ddt_G3R': (0, 0, 1),  # blue
-    'ddt_G3S': (102/255, 102/255, 1),  # pasty blue
-    'ddt_G3D': (180/255, 180/255, 1),  # pastier blue
-
-    'ddt_G4L': (0, 102/255, 0),  # dark green
-    'ddt_G4R': (0, 180/255, 0),  # green
-    'ddt_G4S': (51/255, 1, 51/255),  # pasty green
-    'ddt_G4D': (0, 0, 1),  # blue
-
-    'ddt_G5L': (153/255, 76/255, 0),  # dark orange
-    'ddt_G5R': (1, 128/255, 0),  # orange
-    'ddt_G5S': (1, 178/255, 102/255),  # pasty orange
-    'ddt_G5D': (1, 204/255, 153/255),  # pastier orange
+# COLOR SCHEME
+COLORS_RGB = {
+    # G2
+    'g2r': (0, 0, 153),  # dark blue
+    'g2l': (0, 0, 255),  # light blue
+    'g2s': (0, 0, 153),  # dark blue
+    'g2d': (0, 0, 255),  # light blue
+    
+    'ddt_g2r': (0, 0, 153),  # dark blue
+    'ddt_g2l': (0, 0, 255),  # light blue
+    'ddt_g2s': (0, 0, 153),  # dark blue
+    'ddt_g2d': (0, 0, 255),  # light blue
+    
+    # G3
+    'g3r': (153, 0, 76),  # dark pink
+    'g3l': (255, 0, 127),  # light pink
+    'g3s': (153, 0, 76),  # dark pink
+    'g3d': (255, 0, 127),  # light pink
+    
+    'ddt_g3r': (153, 0, 76),  # dark pink
+    'ddt_g3l': (255, 0, 127),  # light pink
+    'ddt_g3s': (153, 0, 76),  # dark pink
+    'ddt_g3d': (255, 0, 127),  # light pink
+    
+    # G4
+    'g4r': (0, 102, 0),  # dark green
+    'g4l': (0, 204, 0),  # light green
+    'g4s': (0, 102, 0),  # dark green
+    'g4d': (0, 204, 0),  # light green
+    
+    'ddt_g4r': (0, 102, 0),  # dark green
+    'ddt_g4l': (0, 204, 0),  # light green
+    'ddt_g4s': (0, 102, 0),  # dark green
+    'ddt_g4d': (0, 204, 0),  # light green
+    
+    # G5
+    'g5r': (76, 0, 153),  # dark violet
+    'g5l': (127, 0, 255),  # light violet
+    'g5s': (76, 0, 153),  # dark violet
+    'g5d': (127, 0, 255),  # light violet
+    
+    'ddt_g5r': (76, 0, 153),  # dark violet
+    'ddt_g5l': (127, 0, 255),  # light violet
+    'ddt_g5s': (76, 0, 153),  # dark violet
+    'ddt_g5d': (127, 0, 255),  # light violet
+    
+    # BEHAV
+    'ball': (0, 0, 0),  # black
+    'speed': (96, 96, 96),  # dark gray
+    'v_fwd': (160, 160, 160),  # light gray
+    'v_lat': (153, 76, 0),  # dark orange
+    'v_ang': (255, 128, 0),  # light orange
+    'heading': (0, 204, 204),  # cyan
+    'ddt_heading': (0, 204, 204),  # cyan
+    
+    # SENSORY
+    'air': (0, 0, 0),  # black
+    'w_air': (0, 0, 0),  # black
+    
+    'odor_binary': (153, 0, 0),  # dark red
+    'odor_pid': (255, 0, 0),  # light red
 }
