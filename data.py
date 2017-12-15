@@ -104,7 +104,8 @@ class DataLoader(object):
                 col_air = dict(C.COLS_FINAL)['AIR']
                 col_w_air = dict(C.COLS_FINAL)['W_AIR']
                 
-                w_air = np.gradient(data_[:, col_air]) / np.gradient(t)
+                air_unwrapped = unwrap(data_[:, col_air], -180, 180)
+                w_air = np.gradient(air_unwrapped) / np.gradient(t)
                 
                 data_[:, col_w_air] = w_air
                 
