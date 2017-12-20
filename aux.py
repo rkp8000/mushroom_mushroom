@@ -47,6 +47,29 @@ def find_segs(x):
     return np.array([starts, ends]).T
 
 
+def split_data(x, n_bins):
+    """
+    Return n_bins logical masks splitting the data into ordered partitions.
+    """
+    n_valid = np.sum(~np.isnan(x))
+    
+    idxs_all = np.argsort(x)
+    idxs_valid = idxs_all[:n_valid]
+    
+    bounds = np.round(np.arange(n_bins + 1) * (n_valid/n_bins)).astype(int)
+    
+    masks = []
+    
+    for lb, ub in zip(bounds[:-1], bounds[1:]):
+        
+        mask = np.zeros(len(x), dtype=bool)
+        mask[idxs_valid[lb:ub]] = True
+        
+        masks.append(mask.copy())
+        
+    return masks
+
+
 def nansem(x, axis=None):
     """
     Calculate the standard error of the mean ignoring nans.
