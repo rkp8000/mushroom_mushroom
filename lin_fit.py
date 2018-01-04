@@ -1,6 +1,7 @@
 import numpy as np
 
 from aux import Generic
+from data import norm_by_col
 
 
 def fit_h(x, y, wdw_d, method, params):
@@ -30,9 +31,47 @@ def fit_h(x, y, wdw_d, method, params):
         raise ValueError('Method not recognized.')
         
     return h, icpt
+
+
+def fit_hs(xs, y, wdws_d, order, method, params):
+    
+    if method == 'built-in':
+        # sklearn built-in method
+
+        model = params['model']
+
+        x_xtd = make_extended_predictor_matrix(
+            vs=xs, windows=wdws_d, order=order)
+
+        valid = np.all(~np.isnan(x_xtd), axis=1) & (~np.isnan(y))
+
+        rgr = model()
+        rgr.fit(x_xtd[valid], y[valid])
+
+        # get concatenated filters
+        h_xtd = rgr.coef_.copy()
+        
+        # get individual filters
+        wdw_lens = [wdws_d[x_name][1] - wdws_d[x_name][0] for x_name in order]
+        hs_split = np.split(h_xtd, np.cumsum(wdw_lens)[:-1])
+        
+        hs = {x_name: h for x_name, h in zip(order, hs_split)}
+        icpt = rgr.intercept_
+        
+    elif method == 'wiener':
+        
+        raise NotImplementedError('Weiner fitting not implemented yet.')
+        
+    else:
+        
+        raise ValueError('Method not recognized.')
+        
+    return hs, icpt
             
 
-def fit_h_train_test(trial, x_name, y_name, wdw, train_len, test_len, method, params, C):
+def fit_h_train_test(
+        trial, x_name, y_name, wdw, train_len, test_len,
+        method, params, normed, C):
     """
     Fit a filter mapping one trial variable to another.
     
@@ -66,6 +105,10 @@ def fit_h_train_test(trial, x_name, y_name, wdw, train_len, test_len, method, pa
     t = getattr(trial.dl, 't')
     x = getattr(trial.dl, x_name)
     y = getattr(trial.dl, y_name)
+    
+    if normed:
+        x = norm_by_col(x)
+        y = norm_by_col(y)
     
     n_t = len(t)
     
@@ -121,7 +164,8 @@ def fit_h_train_test(trial, x_name, y_name, wdw, train_len, test_len, method, pa
     icpt_mean = icpts.mean(axis=0)
     
     # calculate R2 on test data
-    x_xtd = make_extended_predictor_matrix(vs={x_name: x}, windows={x_name: wdw_d}, order=[x_name])
+    x_xtd = make_extended_predictor_matrix(
+        vs={x_name: x}, windows={x_name: wdw_d}, order=[x_name])
     y_hat = x_xtd.dot(h_mean) + icpt_mean
     
     y_hat_train = np.nan * np.zeros(n_t)
@@ -152,6 +196,147 @@ def fit_h_train_test(trial, x_name, y_name, wdw, train_len, test_len, method, pa
         'y_hat_train': y_hat_train,
         'y_hat_test': y_hat_test,
         'h': h_mean,
+        'icpt': icpt_mean,
+    }
+    
+    return Generic(**fit_result_dict)
+
+
+def fit_hs_train_test(
+        trial, x_names, y_name, wdws, train_len, test_len,
+        method, params, normed, C):
+    """
+    Fit a filter mapping one trial variable to another.
+    
+    :return: 
+        FitResult object with attributes:
+            trial_name
+            
+            x_names
+            y_name
+            
+            wdws
+            wdws_dsct
+            
+            train
+            test
+            
+            t
+            xs
+            y
+            
+            r2_train
+            y_hat_train
+            
+            r2_test
+            y_hat_test
+            
+            t_h
+            h
+    """
+    # get variables of interest
+    t = getattr(trial.dl, 't')
+    xs = {x_name: getattr(trial.dl, x_name) for x_name in x_names}
+    y = getattr(trial.dl, y_name)
+    
+    if normed:
+        xs = {x_name: norm_by_col(x) for x_name, x in xs.items()}
+        y = norm_by_col(y)
+    
+    n_t = len(t)
+    
+    # discretize window and training/test lengths
+    wdws_d = {
+        x_name: (int(round(wdw[0] / C.DT)), int(round(wdw[1] / C.DT)))
+        for x_name, wdw in wdws.items()
+    }
+    
+    train_len_d = int(round(train_len / C.DT))
+    test_len_d = int(round(test_len / C.DT))
+    chunk_len_d = train_len_d + test_len_d
+    
+    t_hs = {x_name: np.arange(*wdw_d) * C.DT for x_name, wdw_d in wdws_d.items()}
+    
+    # extract training chunks from data
+    valid_start = max(np.max([-wdw_d[0] for wdw_d in wdws_d.values()]), 0)
+    valid_end = min(np.min([n_t-wdw_d[1]+1 for wdw_d in wdws_d.values()]), n_t)
+    
+    # make sure there are no NaNs
+    for x in xs.values():
+        assert np.all(~np.isnan(x[valid_start:valid_end]))
+    assert np.all(~np.isnan(y[valid_start:valid_end]))
+    
+    n_valid = valid_end - valid_start
+    n_chunks = int((n_valid + test_len_d) / chunk_len_d)
+    
+    train = np.zeros(n_t, bool)
+    test = np.zeros(n_t, bool)
+    
+    x_chunks = []
+    y_chunks = np.nan * np.zeros((n_chunks, train_len_d))
+    
+    for chunk_ctr in range(n_chunks):
+        
+        chunk_start = valid_start + (chunk_ctr * chunk_len_d)
+        chunk_end = chunk_start + train_len_d
+        
+        x_chunks.append(
+            {x_name: x[chunk_start:chunk_end] for x_name, x in xs.items()})
+            
+        y_chunks[chunk_ctr, :] = y[chunk_start:chunk_end]
+        
+        train[chunk_start:chunk_end] = True
+        test[chunk_end:chunk_end + test_len_d] = True
+    
+    # fit filters for each chunk
+    hs = {x_name: [] for x_name in x_names}
+    icpts = np.nan * np.zeros(n_chunks)
+    
+    for chunk_ctr, (x_chunk, y_chunk) in enumerate(zip(x_chunks, y_chunks)):
+        
+        hs_chunk, icpt = fit_hs(x_chunk, y_chunk, wdws_d, x_names, method, params)
+        
+        for x_name in x_names:
+            hs[x_name].append(hs_chunk[x_name])
+        icpts[chunk_ctr] = icpt
+    
+    hs_mean = {x_name: np.mean(hs_, 0) for x_name, hs_ in hs.items()}
+    icpt_mean = icpts.mean(0)
+    
+    # calculate R2 on test data
+    x_xtd = make_extended_predictor_matrix(vs=xs, windows=wdws_d, order=x_names)
+    h_mean_xtd = np.concatenate([hs_mean[x_name] for x_name in x_names])
+    
+    y_hat = x_xtd.dot(h_mean_xtd) + icpt_mean
+    
+    y_hat_train = np.nan * np.zeros(n_t)
+    y_hat_train[train] = y_hat[train]
+    
+    y_hat_test = np.nan * np.zeros(n_t)
+    y_hat_test[test] = y_hat[test]
+    
+    r2_train = calc_r2(y, y_hat_train)
+    r2_test = calc_r2(y, y_hat_test)
+    
+    fit_result_dict = {
+        'trial_name': trial.name,
+        'x_name': x_name,
+        'y_name': y_name,
+        'wdws': wdws,
+        'wdws_d': wdws_d,
+        'train': train,
+        'test': test,
+        'train_len': train_len,
+        'test_len': test_len,
+        't': t,
+        'xs': xs,
+        'y': y,
+        't_hs': t_hs,
+        'r2_train': r2_train,
+        'r2_test': r2_test,
+        'y_hat_train': y_hat_train,
+        'y_hat_test': y_hat_test,
+        'hs': hs_mean,
         'icpt': icpt_mean,
     }
     
