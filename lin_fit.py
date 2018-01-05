@@ -158,7 +158,7 @@ def fit_h_train_test(
     
     fit_result_dict = {
         'trial_name': trial.name,
-        'x_name': x_name,
+        'x_names': x_names,
         'y_name': y_name,
         'wdws': wdws,
         'wdws_d': wdws_d,

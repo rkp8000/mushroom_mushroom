@@ -843,9 +843,9 @@ def random_shift(x, return_shift_amount=False):
     shift_amount = np.random.randint(0, len(x))
 
     if not return_shift_amount:
-        return shift(x, shift_amount)
+        return shift_circular(x, shift_amount)
     else:
-        return shift(x, shift_amount), shift_amount
+        return shift_circular(x, shift_amount), shift_amount
 
 
 def phase_shift(x, phase):
