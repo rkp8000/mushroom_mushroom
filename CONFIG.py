@@ -30,7 +30,6 @@ EXPTS_SENSORY = [
 EXPTS_W_AIR = [
     'sinusoidal',
     'closed_white',
-    'closed_odor_fluct',
     'white_odor_fluct',
 ]
 
