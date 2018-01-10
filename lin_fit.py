@@ -11,24 +11,36 @@ def fit_h(xs, y, wdws_d, order, method, params):
 
         model = params['model']
 
+        wdw_lens = [wdws_d[x_name][1] - wdws_d[x_name][0] for x_name in order]
+        
         x_xtd = make_extended_predictor_matrix(
             vs=xs, windows=wdws_d, order=order)
 
         valid = np.all(~np.isnan(x_xtd), axis=1) & (~np.isnan(y))
+        
+        if np.sum(valid) <= x_xtd.shape[1] + 1:
+            
+            print('Not enough valid data points.')
+            
+            hs = {
+                x_name: np.nan * np.zeros(wdw_len)
+                for x_name, wdw_len in zip(order, wdw_lens)}
+            icpt = np.nan
+            
+        else:
 
-        rgr = model()
-        rgr.fit(x_xtd[valid], y[valid])
+            rgr = model()
+            rgr.fit(x_xtd[valid], y[valid])
 
-        # get concatenated filters
-        h_xtd = rgr.coef_.copy()
-        
-        # get individual filters
-        wdw_lens = [wdws_d[x_name][1] - wdws_d[x_name][0] for x_name in order]
-        hs_split = np.split(h_xtd, np.cumsum(wdw_lens)[:-1])
-        
-        hs = {x_name: h for x_name, h in zip(order, hs_split)}
-        icpt = rgr.intercept_
-        
+            # get concatenated filters
+            h_xtd = rgr.coef_.copy()
+
+            # get individual filters
+            hs_split = np.split(h_xtd, np.cumsum(wdw_lens)[:-1])
+
+            hs = {x_name: h for x_name, h in zip(order, hs_split)}
+            icpt = rgr.intercept_
+
     elif method == 'wiener':
         
         raise NotImplementedError('Weiner fitting not implemented yet.')
@@ -42,7 +54,7 @@ def fit_h(xs, y, wdws_d, order, method, params):
 
 def fit_h_train_test(
         trial, x_names, y_name, wdws, train_len, test_len,
-        method, params, normed, C):
+        method, params, normed, C, allow_nans=False):
     """
     Fit a filter mapping one trial variable to another.
     
@@ -99,10 +111,11 @@ def fit_h_train_test(
     valid_start = max(np.max([-wdw_d[0] for wdw_d in wdws_d.values()]), 0)
     valid_end = min(np.min([n_t-wdw_d[1]+1 for wdw_d in wdws_d.values()]), n_t)
     
-    # make sure there are no NaNs
-    for x in xs.values():
-        assert np.all(~np.isnan(x[valid_start:valid_end]))
-    assert np.all(~np.isnan(y[valid_start:valid_end]))
+    if not allow_nans:
+        # make sure there are no NaNs
+        for x in xs.values():
+            assert np.all(~np.isnan(x[valid_start:valid_end]))
+        assert np.all(~np.isnan(y[valid_start:valid_end]))
     
     n_valid = valid_end - valid_start
     n_chunks = int((n_valid + test_len_d) / chunk_len_d)
@@ -138,8 +151,8 @@ def fit_h_train_test(
             hs[x_name].append(hs_chunk[x_name])
         icpts[chunk_ctr] = icpt
     
-    hs_mean = {x_name: np.mean(hs_, 0) for x_name, hs_ in hs.items()}
-    icpt_mean = icpts.mean(0)
+    hs_mean = {x_name: np.nanmean(hs_, 0) for x_name, hs_ in hs.items()}
+    icpt_mean = np.nanmean(icpts, 0)
     
     # calculate R2 on test data
     x_xtd = make_extended_predictor_matrix(vs=xs, windows=wdws_d, order=x_names)
