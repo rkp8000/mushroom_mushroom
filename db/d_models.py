@@ -15,6 +15,8 @@ class Trial(Base):
     id = Column(Integer, primary_key=True)
     
     name = Column(String, unique=True)
+    
+    region = Column(String)
     expt = Column(String)
     fly = Column(String)
     number = Column(Integer)
@@ -28,6 +30,8 @@ class Trial(Base):
     f_air = Column(String)
     f_odor_binary = Column(String)
     f_odor_pid = Column(String)
+    
+    fps_behav = Column(Float)
     
     pfx_clean = Column(String)
     
