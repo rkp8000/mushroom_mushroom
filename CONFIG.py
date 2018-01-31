@@ -2,6 +2,11 @@
 PI = 3.14159265359
 DT = 0.1
 
+REGIONS = [
+    'dan',
+    'mbon',
+]
+
 EXPTS = [
     'asensory_5_hz',
     'asensory_10_hz',
@@ -11,6 +16,8 @@ EXPTS = [
     'no_air_motion',
     'closed_odor_fluct',
     'white_odor_fluct',
+    'no_air',
+    'single_pulse',
 ]
 
 EXPTS_ASENSORY = [
@@ -23,6 +30,8 @@ EXPTS_SENSORY = [
     'sinusoidal',
     'closed_white',
     'no_air_motion',
+    'no_air',
+    'single_pulse',
     'closed_odor_fluct',
     'white_odor_fluct',
 ]
@@ -31,11 +40,15 @@ EXPTS_W_AIR = [
     'sinusoidal',
     'closed_white',
     'white_odor_fluct',
+    'no_air',
+    'single_pulse',
 ]
 
 EXPTS_ODOR_FLUCT = [
     'closed_odor_fluct',
     'white_odor_fluct',
+    'no_air',
+    'single_pulse',
 ]
 
 FILE_ENDINGS_ASENSORY = {
@@ -62,7 +75,7 @@ COLS_FICTRAC = {
     'TIMESTAMP': 21,
 }
 
-DT_FICTRAC = 1./60
+FPS_BEHAV_DEFAULT = 60.
 
 # DT_AIR = 0.00204
 
