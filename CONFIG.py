@@ -16,6 +16,9 @@ EXPTS = [
     'no_air_motion',
     'closed_odor_fluct',
     'white_odor_fluct',
+    'closed_periodic_pulses',
+    'white_periodic_pulses',
+    'white_no_odor',
     'no_air',
     'single_pulse',
 ]
@@ -34,6 +37,9 @@ EXPTS_SENSORY = [
     'single_pulse',
     'closed_odor_fluct',
     'white_odor_fluct',
+    'closed_periodic_pulses',
+    'white_periodic_pulses',
+    'white_no_odor',
 ]
 
 EXPTS_W_AIR = [
@@ -42,6 +48,9 @@ EXPTS_W_AIR = [
     'white_odor_fluct',
     'no_air',
     'single_pulse',
+    'closed_periodic_pulses',
+    'white_periodic_pulses',
+    'white_no_odor',
 ]
 
 EXPTS_ODOR_FLUCT = [
@@ -49,6 +58,9 @@ EXPTS_ODOR_FLUCT = [
     'white_odor_fluct',
     'no_air',
     'single_pulse',
+    'closed_periodic_pulses',
+    'white_periodic_pulses',
+    'white_no_odor',
 ]
 
 FILE_ENDINGS_ASENSORY = {

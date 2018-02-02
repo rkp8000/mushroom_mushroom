@@ -294,12 +294,30 @@ def load_gcamp(trial):
         # build paths
         path_t_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.f_t_gcamp)
         path_gcamp = os.path.join(L.DATA_ROOT, trial.path, trial.f_gcamp)
-
+        
         # load data
         t_gcamp = pd.read_csv(path_t_gcamp, header=None).as_matrix()[0]
-        gcamp = pd.read_csv(
-            path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
-
+        
+        if trial.region == 'dan':
+            
+            gcamp = pd.read_csv(
+                path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
+            
+        elif trial.region == 'mbon':
+            
+            g4r_g4l_green = pd.read_csv(
+                path_gcamp, header=None).as_matrix()[:, 2:].astype(float).T
+            
+            gcamp = np.nan * np.zeros((len(g4r_g4l_green), 16))
+            
+            # add in artificial RED channels
+            gcamp[:, 2] = 1.
+            gcamp[:, 6] = 1.
+            
+            # add in GREEN channels
+            gcamp[:, 10] = g4r_g4l_green[:, 0]
+            gcamp[:, 14] = g4r_g4l_green[:, 1]
+            
         if not len(t_gcamp) == len(gcamp):
             raise Exception('Time vector and GCaMP vector must be equal lengths.')
 
@@ -349,7 +367,7 @@ def load_behav(trial):
         mask = (start <= frame_ctrs) & (frame_ctrs < end)
 
         # get time vector and behav data selected by mask
-        t_behav = frame_ctrs[mask] * C.DT_FICTRAC
+        t_behav = frame_ctrs[mask] / trial.fps_behav
 
         # order columns for final behav matrix
         cols = [None for _ in range(C.N_COLS_BEHAV)]
