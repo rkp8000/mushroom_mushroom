@@ -85,90 +85,127 @@ def fit_h_train_test(
             h
     """
     # get variables of interest
+    ## 1D array
     t = getattr(trial.dl, 't')
+    ## dict of 1D arrays with variable names as keys
     xs = {x_name: getattr(trial.dl, x_name) for x_name in x_names}
+    ## 1D array
     y = getattr(trial.dl, y_name)
     
     if normed:
         xs = {x_name: norm_by_col(x) for x_name, x in xs.items()}
         y = norm_by_col(y)
     
+    ## number of time steps
     n_t = len(t)
     
-    # discretize window and training/test lengths
+    # discretize moving window size
+    ## dict of 2-element integer tuples with variable name as keys
     wdws_d = {
         x_name: (int(round(wdw[0] / C.DT)), int(round(wdw[1] / C.DT)))
         for x_name, wdw in wdws.items()
     }
     
-    train_len_d = int(round(train_len / C.DT))
-    test_len_d = int(round(test_len / C.DT))
-    chunk_len_d = train_len_d + test_len_d
-    
-    t_hs = {x_name: np.arange(*wdw_d) * C.DT for x_name, wdw_d in wdws_d.items()}
-    
-    # extract training chunks from data
-    valid_start = max(np.max([-wdw_d[0] for wdw_d in wdws_d.values()]), 0)
-    valid_end = min(np.min([n_t-wdw_d[1]+1 for wdw_d in wdws_d.values()]), n_t)
-    
-    if not allow_nans:
-        # make sure there are no NaNs
-        for x in xs.values():
-            assert np.all(~np.isnan(x[valid_start:valid_end]))
-        assert np.all(~np.isnan(y[valid_start:valid_end]))
-    
-    n_valid = valid_end - valid_start
-    n_chunks = int((n_valid + test_len_d) / chunk_len_d)
-    
-    train = np.zeros(n_t, bool)
-    test = np.zeros(n_t, bool)
-    
-    x_chunks = []
-    y_chunks = np.nan * np.zeros((n_chunks, train_len_d))
-    
-    for chunk_ctr in range(n_chunks):
+    # make filter time vectors
+    ## dict of 1D arrays with variable names as keys
+    t_hs = {
+        x_name: np.arange(*wdw_d) * C.DT
+        for x_name, wdw_d in wdws_d.items()
+    }
+
+    if test_len:
+        # discretize training and test lengths
+        train_len_d = int(round(train_len / C.DT))
+        test_len_d = int(round(test_len / C.DT))
+        chunk_len_d = train_len_d + test_len_d
+
         
-        chunk_start = valid_start + (chunk_ctr * chunk_len_d)
-        chunk_end = chunk_start + train_len_d
+        # extract training chunks from data
         
-        x_chunks.append(
-            {x_name: x[chunk_start:chunk_end] for x_name, x in xs.items()})
-            
-        y_chunks[chunk_ctr, :] = y[chunk_start:chunk_end]
+        ## get start and end points such that filter windows have no nans
+        valid_start = max(np.max([-wdw_d[0] for wdw_d in wdws_d.values()]), 0)
+        valid_end = min(np.min([n_t-wdw_d[1]+1 for wdw_d in wdws_d.values()]), n_t)
+
+        if not allow_nans:
+            # make sure there are no NaNs
+            for x in xs.values():
+                assert np.all(~np.isnan(x[valid_start:valid_end]))
+            assert np.all(~np.isnan(y[valid_start:valid_end]))
+
+        n_valid = valid_end - valid_start
+        n_chunks = int((n_valid + test_len_d) / chunk_len_d)
+
+        train = np.zeros(n_t, bool)
+        test = np.zeros(n_t, bool)
+
+        # TO BECOME: list of dicts of 1D arrays with variable names for keys
+        x_chunks = []
+        # TO BECOME: 2D array
+        y_chunks = np.nan * np.zeros((n_chunks, train_len_d))
+    
+        # fill in "chunks"
+        for chunk_ctr in range(n_chunks):
+
+            chunk_start = valid_start + (chunk_ctr * chunk_len_d)
+            chunk_end = chunk_start + train_len_d
+
+            x_chunks.append(
+                {x_name: x[chunk_start:chunk_end] for x_name, x in xs.items()})
+
+            y_chunks[chunk_ctr, :] = y[chunk_start:chunk_end]
+
+            train[chunk_start:chunk_end] = True
+            test[chunk_end:chunk_end + test_len_d] = True
+
+        # fit filters for each chunk
+        hs = {x_name: [] for x_name in x_names}
+        icpts = np.nan * np.zeros(n_chunks)
+
+        for chunk_ctr, (x_chunk, y_chunk) in enumerate(zip(x_chunks, y_chunks)):
+
+            hs_chunk, icpt = fit_h(
+                x_chunk, y_chunk, wdws_d, x_names, method, params)
+
+            for x_name in x_names:
+                hs[x_name].append(hs_chunk[x_name])
+            icpts[chunk_ctr] = icpt
+
+        hs_mean = {x_name: np.nanmean(hs_, 0) for x_name, hs_ in hs.items()}
+        icpt_mean = np.nanmean(icpts, 0)
+
+        # calculate R2 on test data
+        x_xtd = make_extended_predictor_matrix(
+            vs=xs, windows=wdws_d, order=x_names)
+        h_mean_xtd = np.concatenate([hs_mean[x_name] for x_name in x_names])
+
+        y_hat = x_xtd.dot(h_mean_xtd) + icpt_mean
+
+        y_hat_train = np.nan * np.zeros(n_t)
+        y_hat_train[train] = y_hat[train]
+
+        y_hat_test = np.nan * np.zeros(n_t)
+        y_hat_test[test] = y_hat[test]
+
+        r2_train = calc_r2(y, y_hat_train)
+        r2_test = calc_r2(y, y_hat_test)
+    else:
+        print('Not splitting into test/training data.')
+        hs_mean, icpt_mean = fit_h(xs, y, wdws_d, x_names, method, params)
         
-        train[chunk_start:chunk_end] = True
-        test[chunk_end:chunk_end + test_len_d] = True
-    
-    # fit filters for each chunk
-    hs = {x_name: [] for x_name in x_names}
-    icpts = np.nan * np.zeros(n_chunks)
-    
-    for chunk_ctr, (x_chunk, y_chunk) in enumerate(zip(x_chunks, y_chunks)):
+        # make predictions on full dataset
+        x_xtd = make_extended_predictor_matrix(
+            vs=xs, windows=wdws_d, order=x_names)
+        h_mean_xtd = np.concatenate([hs_mean[x_name] for x_name in x_names])
         
-        hs_chunk, icpt = fit_h(x_chunk, y_chunk, wdws_d, x_names, method, params)
+        y_hat_train = x_xtd.dot(h_mean_xtd) + icpt_mean
+        y_hat_test = np.nan * np.zeros(y_hat_train.shape)
         
-        for x_name in x_names:
-            hs[x_name].append(hs_chunk[x_name])
-        icpts[chunk_ctr] = icpt
-    
-    hs_mean = {x_name: np.nanmean(hs_, 0) for x_name, hs_ in hs.items()}
-    icpt_mean = np.nanmean(icpts, 0)
-    
-    # calculate R2 on test data
-    x_xtd = make_extended_predictor_matrix(vs=xs, windows=wdws_d, order=x_names)
-    h_mean_xtd = np.concatenate([hs_mean[x_name] for x_name in x_names])
-    
-    y_hat = x_xtd.dot(h_mean_xtd) + icpt_mean
-    
-    y_hat_train = np.nan * np.zeros(n_t)
-    y_hat_train[train] = y_hat[train]
-    
-    y_hat_test = np.nan * np.zeros(n_t)
-    y_hat_test[test] = y_hat[test]
-    
-    r2_train = calc_r2(y, y_hat_train)
-    r2_test = calc_r2(y, y_hat_test)
-    
+        r2_train = calc_r2(y, y_hat_train)
+        r2_test = np.nan
+        
+        train = np.ones(n_t, bool)
+        test = np.zeros(n_t, bool)
+
     fit_result_dict = {
         'trial_name': trial.name,
         'x_names': x_names,
