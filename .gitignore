@@ -1,4 +1,5 @@
 env
+data/*
 tables
 data_snapshots
 .idea
@@ -13,6 +14,7 @@ data_snapshots
 *.png
 *.npy
 *.js
+*.csv
 
 sandbox.ipynb
 LOCAL.py

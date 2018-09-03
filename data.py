@@ -413,7 +413,9 @@ def load_air(trial, t_behav=None, behav=None):
         # don't calc air tube vel. until we've downsampled it
         w_air = np.nan * np.ones(len(t_air))
         
-    elif trial.expt in ['closed', 'closed_odor_fluct']:
+    elif trial.expt in [
+            'closed', 'closed_odor_fluct',
+            'closed_low_flow_multi1', 'closed_low_flow_multi2']:
         
         # make air tube signal equal to behavioral heading signal
         if (t_behav is None) or (behav is None):
