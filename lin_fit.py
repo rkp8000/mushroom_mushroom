@@ -27,6 +27,9 @@ def fit_h(xs, y, wdws_d, order, method, params):
                 for x_name, wdw_len in zip(order, wdw_lens)}
             icpt = np.nan
             
+            y_hat = np.nan * np.zeros(len(y))
+            r2 = np.nan
+            
         else:
 
             rgr = model()
