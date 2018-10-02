@@ -54,7 +54,7 @@ def fit_h(xs, y, wdws_d, order, method, params):
 
 def fit_h_train_test(
         trial, x_names, y_name, wdws, train_len, test_len,
-        method, params, normed, C, allow_nans=False):
+        method, params, C, allow_nans=False):
     """
     Fit a filter mapping one trial variable to another.
     
@@ -91,10 +91,6 @@ def fit_h_train_test(
     xs = {x_name: getattr(trial.dl, x_name) for x_name in x_names}
     ## 1D array
     y = getattr(trial.dl, y_name)
-    
-    if normed:
-        xs = {x_name: norm_by_col(x) for x_name, x in xs.items()}
-        y = norm_by_col(y)
     
     ## number of time steps
     n_t = len(t)
