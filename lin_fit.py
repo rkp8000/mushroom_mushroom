@@ -40,6 +40,11 @@ def fit_h(xs, y, wdws_d, order, method, params):
 
             hs = {x_name: h for x_name, h in zip(order, hs_split)}
             icpt = rgr.intercept_
+            
+            y_hat = np.nan * np.zeros(len(y))
+            y_hat[valid] = rgr.predict(x_xtd[valid])
+            
+            r2 = rgr.score(x_xtd[valid], y[valid])
 
     elif method == 'wiener':
         
@@ -49,7 +54,7 @@ def fit_h(xs, y, wdws_d, order, method, params):
         
         raise ValueError('Method not recognized.')
         
-    return hs, icpt
+    return hs, icpt, y_hat, r2
 
 
 def fit_h_train_test(
