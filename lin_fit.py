@@ -1,7 +1,6 @@
 import numpy as np
 
 from aux import Generic
-from data import norm_by_col
 
 
 def fit_h(xs, y, wdws_d, order, method, params):
