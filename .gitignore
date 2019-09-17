@@ -1,25 +1,7 @@
-env
-data/*
-tables
-data_snapshots
-.idea
+*
 
-.DS_Store
-.DS_store
-
-*.pyc
-.ipynb_checkpoints
-.cache
-
-*.pdf
-*.png
-*.npy
-*.js
-*.csv
-
-sandbox.ipynb
-LOCAL.py
-
-*.m~
-*.mat
+!.gitignore
+!*.md
+!*.ipynb
+!*.py
 
