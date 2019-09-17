@@ -1,4 +1,5 @@
 from matplotlib.pyplot import cm
+import matplotlib.pyplot as plt
 import numbers
 import numpy as np
 import warnings
@@ -60,6 +61,17 @@ def get_n_colors(n, colormap='rainbow'):
     """
 
     return getattr(cm, colormap)(np.linspace(0, 1, n))
+
+
+def fast_fig(n_ax, ax_size, fig_w=15):
+    """Quickly make figure and axes objects from number of axes and ax size (h, w)."""
+    n_col = int(round(fig_w/ax_size[1]))
+    n_row = int(np.ceil(n_ax/n_col))
+    
+    fig_h = n_row*ax_size[0]
+    
+    fig, axs = plt.subplots(n_row, n_col, figsize=(fig_w, fig_h), tight_layout=True, squeeze=False)
+    return fig, axs.flatten()
 
 
 def conditional_dependency_diagram(ax, nodes, labels, cd_info, lw_scale, text_font_size):

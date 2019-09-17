@@ -2,6 +2,7 @@ from __future__ import division, print_function
 import logging
 import numpy as np
 import os
+import pandas as pd
 
 
 class Generic(object):
@@ -82,3 +83,73 @@ def nansem(x, axis=None):
     sqrt_n = np.sqrt((~np.isnan(x)).sum(axis=axis))
 
     return std / sqrt_n
+
+
+# load data
+def load_data(expt, base, cols, normed_cols, odor):
+    data_dir = os.path.join('data', expt)
+    
+    trials = []  # list of trials
+    data_u = {}  # unnormalized data
+    data_n = {}  # normalized data
+    d_odor = {}  # dfs of odor times
+
+    for fly in os.listdir(data_dir):
+        fly_path = os.path.join(data_dir, fly)
+
+        for trial in os.listdir(fly_path):
+            trial_path = os.path.join(fly_path, trial)
+
+            # load original data
+            data_o_ = pd.read_csv(os.path.join(trial_path, base))
+
+            # select out data (unnormalized) to store in renamed columns
+            data_u_ = pd.DataFrame()
+            for col in cols:
+                if len(col) == 2:
+                    data_u_[col[0]] = data_o_[col[1]]
+                elif len(col) == 3:
+                    f = col[2]  # func to apply 
+                    data_u_[col[0]] = f(data_o_[col[1]])
+
+            # make odor mask
+            odor_mask = np.zeros(len(data_u_['Time']), bool)
+
+            if odor is None:  # no odor
+                df_odor = pd.DataFrame(data={'Start': [], 'Stop': []}, columns=['Start', 'Stop'])
+            
+            elif hasattr(odor, 'upper'):  # is string
+                
+                # load file
+                df_odor = pd.read_csv(os.path.join(trial_path, odor))
+                df_odor.columns = ['Start', 'Stop']
+                
+                # get starts and stops
+                starts = df_odor['Start']
+                stops = df_odor['Stop']
+
+                # fill in mask
+                for start, stop in zip(starts, stops):
+                    odor_mask[(start <= data_u_['Time']) & (data_u_['Time'] < stop)] = True
+                    
+            else:  # single odor presentation
+                start, stop = odor
+                df_odor = pd.DataFrame(data={'Start': [start], 'Stop': [stop]}, columns=['Start', 'Stop'])
+                
+                odor_mask[(start <= data_u_['Time']) & (data_u_['Time'] < stop)]
+
+            data_u_['Odor'] = odor_mask.astype(float)
+
+            # normalize data
+            data_n_ = data_u_.copy()
+            data_n_[normed_cols] -= data_n_[normed_cols].mean()
+            data_n_[normed_cols] /= data_n_[normed_cols].std()
+
+            # store all results
+            data_u[trial] = data_u_
+            data_n[trial] = data_n_
+            d_odor[trial] = df_odor
+            
+            trials.append(trial)
+            
+    return Generic(trials=trials, d_u=data_u, d_n=data_n, d_odor=d_odor)

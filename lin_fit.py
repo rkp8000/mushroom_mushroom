@@ -3,7 +3,7 @@ import numpy as np
 from aux import Generic
 
 
-def fit_h(xs, y, wdws_d, order, method, params):
+def fit_h(xs, y, wdws_d, order, method, params, return_model=False):
     
     if method == 'built-in':
         # sklearn built-in method
@@ -55,8 +55,11 @@ def fit_h(xs, y, wdws_d, order, method, params):
     else:
         
         raise ValueError('Method not recognized.')
-        
-    return hs, icpt, y_hat, r2
+    
+    if return_model:
+        return hs, icpt, y_hat, r2, rgr
+    else:
+        return hs, icpt, y_hat, r2
 
 
 def fit_h_train_test(
