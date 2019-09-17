@@ -87,7 +87,7 @@ def nansem(x, axis=None):
 
 # load data
 def load_data(expt, base, cols, normed_cols, odor):
-    data_dir = os.path.join('data', expt)
+    data_dir = os.path.join('data_', expt)
     
     trials = []  # list of trials
     data_u = {}  # unnormalized data
