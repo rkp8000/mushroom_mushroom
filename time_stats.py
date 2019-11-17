@@ -153,8 +153,8 @@ def xcov_multi_with_confidence(
     if scale:
 
         # scale by average variance of signals
-        var_x = np.cov(np.concatenate(xs), np.concatenate(xs))[0, 0]
-        var_y = np.cov(np.concatenate(ys), np.concatenate(ys))[0, 0]
+        var_x = np.nanvar(np.concatenate(xs))
+        var_y = np.nanvar(np.concatenate(ys))
         norm_factor = np.sqrt(var_x * var_y)
         covs /= norm_factor
         lbs /= norm_factor
