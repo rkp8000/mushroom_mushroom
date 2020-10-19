@@ -2,6 +2,7 @@ from matplotlib.pyplot import cm
 import matplotlib.pyplot as plt
 import numbers
 import numpy as np
+from scipy import stats
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 
@@ -28,6 +29,16 @@ def unity_line(ax, x_min, x_max, **kwargs):
     ax.plot(xs, xs, **kwargs)
     
     return ax
+
+
+def get_line(x, y):
+    nnan_mask = (~np.isnan(x)) & (~np.isnan(y))
+    slp, icpt, r, p, stderr = stats.linregress(x[nnan_mask], y[nnan_mask])
+    
+    x_ln = np.array([np.nanmin(x), np.nanmax(x)])
+    y_ln = slp*x_ln + icpt
+    
+    return x_ln, y_ln, (slp, icpt, r, p, stderr)
 
         
 def set_font_size(ax, font_size, legend_font_size=None):
