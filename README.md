@@ -33,3 +33,6 @@ Ext Fig 14B-C: 9_cl_nested.ipynb
 Ext Fig 15A-H: 10A_odor_response_model_real_data_before_and_during.ipynb
 
 The other notebooks implement additional analyses not shown in the publication.
+
+
+All code uses Python 3.7 with Anaconda packages.
