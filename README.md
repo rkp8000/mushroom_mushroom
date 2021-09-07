@@ -16,21 +16,21 @@ Fig 4C: 10A_odor_response_model_real_data_before_and_during.ipynb
 
 Fig 5B-E: 10A_odor_response_model_real_data_before_and_during.ipynb
 
-Ext Fig 4E-H: 1A_mvmt_initiation.ipynb
+Supp Fig 1: 1A_mvmt_initiation.ipynb
 
-Ext Fig 5G: 4A_multi_filters.ipynb
+Ext Fig 4G: 4A_multi_filters.ipynb
 
-Ext Fig7C: 4_cl_filters.ipynb
+Ext Fig 3G: 4_cl_filters.ipynb
 
-Ext Fig 9A: 4_cl_filters.ipynb
+Ext Fig 5G: 4_cl_filters.ipynb
 
-Ext Fig 11-12: 10A_odor_response_model_real_data_before_and_during.ipynb
+Ext Fig 6: 10A_odor_response_model_real_data_before_and_during.ipynb
 
-Ext Fig 13: 8_cl_odor_trig_corr_mats.ipynb
+Ext Fig 7: 8_cl_odor_trig_corr_mats.ipynb
 
-Ext Fig 14B-C: 9_cl_nested.ipynb
+Ext Fig 8B-C: 9_cl_nested.ipynb
 
-Ext Fig 15A-H: 10A_odor_response_model_real_data_before_and_during.ipynb
+Ext Fig 9: 10A_odor_response_model_real_data_before_and_during.ipynb
 
 The other notebooks implement additional analyses not shown in the publication.
 
